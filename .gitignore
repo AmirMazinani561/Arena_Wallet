@@ -1,0 +1,43 @@
+# وابستگی‌ها
+node_modules/
+.pnp
+.pnp.js
+
+# خروجی بیلد
+.next/
+out/
+build/
+dist/
+
+# متغیرهای محیطی (هرگز نباید در گیت قرار بگیرد)
+.env
+.env.local
+.env*.local
+.env.production
+
+# لاگ‌ها
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# فایل‌های سیستمی
+.DS_Store
+Thumbs.db
+
+# ادیتور
+.vscode/
+.idea/
+
+# تست و کش
+coverage/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# فایل‌های پشتیبان دیتابیس
+*.sql.bak
+backup_*.json
+
+# فایل‌های ZIP منبع (فقط برای دانلود موقت از پیش‌نمایش)
+public/*.zip

@@ -1,0 +1,282 @@
+import { NextResponse } from "next/server";
+import { translateDbError } from "@/db/client";
+import {
+  ensureDatabase,
+  listAccounts,
+  listTransactions,
+  createTransaction,
+  updateTransaction,
+  deleteTransaction,
+  getTransaction,
+  AccountRow,
+} from "@/db/repo";
+import { toShamsiDateString, shamsiToGregorian } from "@/lib/date-utils";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * تعیین خودکار ماهیت تراکنش از روی نوع حساب مبدا و مقصد.
+ * کاربر نیازی به انتخاب دستی نوع تراکنش ندارد.
+ */
+export function deriveTxType(
+  fromAcc: AccountRow,
+  toAcc: AccountRow
+): { type: string; error?: string } {
+  const asset = ["bank", "cash", "person"];
+  const fromIsAsset = asset.includes(fromAcc.type);
+  const toIsAsset = asset.includes(toAcc.type);
+
+  if (fromIsAsset && toAcc.type === "expense") return { type: "expense" };
+  if (fromAcc.type === "income" && toIsAsset) return { type: "income" };
+  if (fromIsAsset && toIsAsset) return { type: "transfer" };
+
+  if (fromAcc.type === "expense") {
+    return {
+      type: "",
+      error:
+        "سرفصل هزینه نمی‌تواند مبدا تراکنش باشد. مبدا باید بانک، صندوق، شخص یا سرفصل درآمد باشد.",
+    };
+  }
+  if (toAcc.type === "income") {
+    return {
+      type: "",
+      error:
+        "سرفصل درآمد نمی‌تواند مقصد تراکنش باشد. مقصد باید بانک، صندوق، شخص یا سرفصل هزینه باشد.",
+    };
+  }
+  if (fromAcc.type === "income" && toAcc.type === "expense") {
+    return {
+      type: "",
+      error: "ثبت تراکنش مستقیم بین سرفصل درآمد و سرفصل هزینه از نظر حسابداری مجاز نیست.",
+    };
+  }
+  return { type: "", error: "ترکیب حساب مبدا و مقصد معتبر نیست." };
+}
+
+export async function GET(req: Request) {
+  try {
+    await ensureDatabase();
+    const { searchParams } = new URL(req.url);
+
+    const accountId = searchParams.get("accountId");
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
+
+    const allAccounts = await listAccounts();
+    const accountMap = new Map<string, AccountRow>();
+    for (const a of allAccounts) accountMap.set(a.id, a);
+
+    // اگر حساب انتخابی یک سرفصل باشد، زیرمجموعه‌های آن نیز لحاظ می‌شوند
+    let accountIds: string[] | undefined;
+    if (accountId) {
+      accountIds = [accountId, ...allAccounts.filter((a) => a.parentId === accountId).map((a) => a.id)];
+    }
+
+    const { items, total, sums } = await listTransactions({
+      id: searchParams.get("id"),
+      type: searchParams.get("type"),
+      accountIds,
+      startDate: searchParams.get("startDate"),
+      endDate: searchParams.get("endDate"),
+      search: searchParams.get("query"),
+      limit: Number.isFinite(limit) ? limit : 50,
+      offset: Number.isFinite(offset) ? offset : 0,
+    });
+
+    const enriched = items.map((tx) => {
+      const fromAcc = accountMap.get(tx.fromAccountId);
+      const toAcc = accountMap.get(tx.toAccountId);
+      return {
+        ...tx,
+        fromAccount: fromAcc
+          ? {
+              id: fromAcc.id,
+              name: fromAcc.name,
+              type: fromAcc.type,
+              parentName: fromAcc.parentId ? accountMap.get(fromAcc.parentId)?.name : undefined,
+              icon: fromAcc.icon,
+              color: fromAcc.color,
+            }
+          : null,
+        toAccount: toAcc
+          ? {
+              id: toAcc.id,
+              name: toAcc.name,
+              type: toAcc.type,
+              parentName: toAcc.parentId ? accountMap.get(toAcc.parentId)?.name : undefined,
+              icon: toAcc.icon,
+              color: toAcc.color,
+            }
+          : null,
+      };
+    });
+
+    return NextResponse.json({
+      transactions: enriched,
+      total,
+      sums,
+      hasMore: offset + items.length < total,
+    });
+  } catch (err: unknown) {
+    const message = translateDbError(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    await ensureDatabase();
+    const body = await req.json();
+    const { amount, fee, fromAccountId, toAccountId, shamsiDate, date, description, trackingNumber } =
+      body;
+
+    const numAmount = Number(amount);
+    if (!numAmount || numAmount <= 0) {
+      return NextResponse.json(
+        { error: "مبلغ تراکنش باید عددی بزرگتر از صفر باشد." },
+        { status: 400 }
+      );
+    }
+    if (!fromAccountId || !toAccountId) {
+      return NextResponse.json({ error: "حساب مبدا و مقصد الزامی هستند." }, { status: 400 });
+    }
+    if (fromAccountId === toAccountId) {
+      return NextResponse.json(
+        { error: "حساب مبدا و مقصد نمی‌توانند یکسان باشند." },
+        { status: 400 }
+      );
+    }
+
+    const allAccounts = await listAccounts();
+    const fromAcc = allAccounts.find((a) => a.id === fromAccountId);
+    const toAcc = allAccounts.find((a) => a.id === toAccountId);
+
+    if (!fromAcc || !toAcc) {
+      return NextResponse.json({ error: "حساب انتخاب‌شده در سیستم یافت نشد." }, { status: 400 });
+    }
+
+    const derived = deriveTxType(fromAcc, toAcc);
+    if (derived.error) {
+      return NextResponse.json({ error: derived.error }, { status: 400 });
+    }
+
+    const numFee = Math.max(0, Number(fee) || 0);
+
+    let txDate: Date;
+    let actualShamsi = shamsiDate ? String(shamsiDate).trim() : "";
+
+    if (actualShamsi && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(actualShamsi)) {
+      txDate = shamsiToGregorian(actualShamsi);
+      actualShamsi = toShamsiDateString(txDate);
+    } else if (date) {
+      txDate = new Date(date);
+      actualShamsi = toShamsiDateString(txDate);
+    } else {
+      txDate = new Date();
+      actualShamsi = toShamsiDateString(txDate);
+    }
+
+    const transaction = await createTransaction({
+      type: derived.type,
+      amount: numAmount,
+      fee: numFee,
+      fromAccountId,
+      toAccountId,
+      date: txDate,
+      shamsiDate: actualShamsi,
+      description: description ? String(description).trim() : null,
+      trackingNumber: trackingNumber ? String(trackingNumber).trim() : null,
+    });
+
+    return NextResponse.json({ success: true, transaction });
+  } catch (err: unknown) {
+    const message = translateDbError(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    await ensureDatabase();
+    const body = await req.json();
+    const { id, amount, fee, fromAccountId, toAccountId, shamsiDate, description, trackingNumber } =
+      body;
+
+    if (!id) {
+      return NextResponse.json({ error: "شناسه تراکنش مشخص نشده است." }, { status: 400 });
+    }
+
+    const existing = await getTransaction(String(id));
+    if (!existing) {
+      return NextResponse.json({ error: "تراکنش یافت نشد." }, { status: 404 });
+    }
+
+    const finalFromId = fromAccountId || existing.fromAccountId;
+    const finalToId = toAccountId || existing.toAccountId;
+
+    if (finalFromId === finalToId) {
+      return NextResponse.json(
+        { error: "حساب مبدا و مقصد نمی‌توانند یکسان باشند." },
+        { status: 400 }
+      );
+    }
+
+    const allAccounts = await listAccounts();
+    const fromAcc = allAccounts.find((a) => a.id === finalFromId);
+    const toAcc = allAccounts.find((a) => a.id === finalToId);
+    if (!fromAcc || !toAcc) {
+      return NextResponse.json({ error: "حساب انتخاب‌شده یافت نشد." }, { status: 400 });
+    }
+
+    const derived = deriveTxType(fromAcc, toAcc);
+    if (derived.error) {
+      return NextResponse.json({ error: derived.error }, { status: 400 });
+    }
+
+    let dateValue: Date | undefined;
+    let shamsiValue: string | undefined;
+    if (shamsiDate) {
+      dateValue = shamsiToGregorian(String(shamsiDate).trim());
+      shamsiValue = toShamsiDateString(dateValue);
+    }
+
+    const nextFee =
+      fee === undefined || fee === null || fee === ""
+        ? existing.fee
+        : Math.max(0, Number(fee) || 0);
+
+    await updateTransaction(String(id), {
+      type: derived.type,
+      amount: amount ? Number(amount) : undefined,
+      fee: nextFee,
+      fromAccountId: finalFromId,
+      toAccountId: finalToId,
+      date: dateValue,
+      shamsiDate: shamsiValue,
+      description: description !== undefined ? (description ? String(description).trim() : null) : undefined,
+      trackingNumber:
+        trackingNumber !== undefined ? (trackingNumber ? String(trackingNumber).trim() : null) : undefined,
+    });
+
+    return NextResponse.json({ success: true, message: "تراکنش با موفقیت ویرایش شد." });
+  } catch (err: unknown) {
+    const message = translateDbError(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    await ensureDatabase();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "شناسه تراکنش مشخص نشده است." }, { status: 400 });
+    }
+    await deleteTransaction(id);
+    return NextResponse.json({ success: true, message: "تراکنش حذف شد." });
+  } catch (err: unknown) {
+    const message = translateDbError(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

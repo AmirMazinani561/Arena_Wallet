@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --ios-blue: #0284c7;
+    --ios-blue-light: #e0f2fe;
+    --ios-blue-dark: #0369a1;
+  }
+
+  body {
+    direction: rtl;
+    text-align: right;
+    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    background-color: #f0f6fa;
+    color: #1e293b;
+    overflow-x: hidden;
+  }
+
+  input, textarea, select {
+    user-select: text;
+  }
+}
+
+/* Custom iOS style animations & scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+.ios-glass {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.ios-card {
+  background: #ffffff;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 20px -2px rgba(2, 132, 199, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(224, 242, 254, 0.8);
+}
+
+.ios-card-pressable {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.ios-card-pressable:active {
+  transform: scale(0.98);
+}
+
+/* جلوگیری از اسکرول کشسان کل صفحه در Safari آیفون — فقط نواحی داخلی اسکرول می‌شوند */
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+/* حذف دکمه‌ی پیش‌فرض پاک‌کردن Safari در input[type=search] (دکمه‌ی اختصاصی خودمان را داریم) */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* جلوگیری از زوم خودکار Safari هنگام فوکوس روی فیلدها (فونت زیر 16px باعث زوم می‌شود) */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
