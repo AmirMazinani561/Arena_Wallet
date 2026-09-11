@@ -204,8 +204,15 @@ export function HomeTab({
                       )}
                     </div>
                     <div className="truncate">
-                      <div className="text-xs font-bold text-slate-800 truncate">
-                        {tx.description || (isExp ? "پرداخت هزینه" : isInc ? "دریافت درآمد" : "انتقال وجه")}
+                      <div className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                        <span className="truncate">
+                          {tx.description || (isExp ? "پرداخت هزینه" : isInc ? "دریافت درآمد" : "انتقال وجه")}
+                        </span>
+                        {tx.status === "pending" && (
+                          <span className="shrink-0 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5">
+                            در انتظار
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                         <span>{tx.shamsiDate}</span>

@@ -31,6 +31,8 @@ export interface Transaction {
   shamsiDate: string;
   description?: string | null;
   trackingNumber?: string | null;
+  /** وضعیت: active (کامل) یا pending (ثبت‌شده از پیامک، در انتظار تکمیل) */
+  status?: "pending" | "active";
   createdAt?: string;
   updatedAt?: string;
   fromAccount?: {

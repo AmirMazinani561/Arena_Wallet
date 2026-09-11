@@ -153,6 +153,8 @@ export async function POST(req: Request) {
       shamsiDate: String(t.shamsiDate || ""),
       description: t.description ? String(t.description) : null,
       trackingNumber: t.trackingNumber ? String(t.trackingNumber) : null,
+      status: "active",
+      sourceHash: null,
     }));
 
     await replaceAll(accountsData, txData);
