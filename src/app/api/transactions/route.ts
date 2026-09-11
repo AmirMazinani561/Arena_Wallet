@@ -78,6 +78,7 @@ export async function GET(req: Request) {
     const { items, total, sums } = await listTransactions({
       id: searchParams.get("id"),
       type: searchParams.get("type"),
+      status: searchParams.get("status"),
       accountIds,
       startDate: searchParams.get("startDate"),
       endDate: searchParams.get("endDate"),

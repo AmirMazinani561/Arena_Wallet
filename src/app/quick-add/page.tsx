@@ -28,7 +28,9 @@ interface IntakeResponse {
   needsAccount?: boolean;
   kind?: "deposit" | "withdrawal" | "fee" | "unknown";
   amount?: number;
+  amountSign?: "+" | "-" | null;
   fee?: number;
+  description?: string;
   balance?: number | null;
   shamsiDate?: string;
   hasExplicitDate?: boolean;
@@ -70,6 +72,22 @@ const SAMPLES: { label: string; text: string }[] = [
   {
     label: "برداشت خودپرداز",
     text: "برداشت نقدی از خودپرداز; کارت 6219-86**-****-9023; مبلغ 3,000,000 ريال; ساعت 21:45",
+  },
+  {
+    label: "نشست (واریز)",
+    text: "مبلغ 5,000,000 ریال به حساب ۴۷۸۸-۹۰۱-۱۲ نشست; مانده:555,000,000ريال; تاريخ:1404-06-22-10:20",
+  },
+  {
+    label: "پرید (برداشت)",
+    text: "مبلغ 1,200,000 ریال از کارت 6219-86**-****-9023 پرید; مانده:11,145,678ريال; تاريخ:1404-06-22-11:05",
+  },
+  {
+    label: "علامت − (برداشت)",
+    text: "کارت 6219-86**-****-9023; مبلغ:-750,000ريال; تاريخ:1404-06-22-12:00",
+  },
+  {
+    label: "علامت + (واریز)",
+    text: "حساب ۴۷۸۸-۹۰۱-۱۲; مبلغ:+9,000,000ريال; تاريخ:1404-06-22-12:30",
   },
 ];
 
@@ -117,6 +135,7 @@ function KindBadge({ kind }: { kind: IntakeResponse["kind"] }) {
 
 export default function QuickAddPage() {
   const [text, setText] = useState("");
+  const [desc, setDesc] = useState("");
   const [tokenRequired, setTokenRequired] = useState(false);
   const [token, setToken] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -160,7 +179,7 @@ export default function QuickAddPage() {
       const res = await fetch("/api/sms-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, token, dryRun: true }),
+        body: JSON.stringify({ text, token, description: desc, dryRun: true }),
       });
       setResult(await res.json());
     } catch {
@@ -177,7 +196,7 @@ export default function QuickAddPage() {
       const res = await fetch("/api/sms-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, token }),
+        body: JSON.stringify({ text, token, description: desc }),
       });
       const data: IntakeResponse = await res.json();
       if (data.ok && data.created) {
@@ -242,6 +261,18 @@ export default function QuickAddPage() {
             className="w-full text-xs leading-relaxed bg-slate-50 border border-slate-200 rounded-2xl p-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent resize-none placeholder:text-slate-300"
           />
 
+          {/* شرح دلخواه — مثل همان چیزی که شورتکات قبل از ارسال می‌پرسد */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700">شرح تراکنش (اختیاری)</label>
+            <input
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              dir="auto"
+              placeholder="مثلاً: خرید هفتگی — اگر خالی بماند متن پیامک ذخیره می‌شود"
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-2xl p-3 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent placeholder:text-slate-300"
+            />
+          </div>
+
           {/* نمونه‌ها */}
           <div className="flex flex-wrap gap-1.5">
             <span className="text-[10px] text-slate-400 self-center">نمونه برای تست:</span>
@@ -294,6 +325,10 @@ export default function QuickAddPage() {
             </div>
 
             <Row label="مبلغ" value={`${formatMoney(result.amount || 0)} ریال`} />
+            {result.amountSign && (
+              <Row label="علامت کنار مبلغ" value={result.amountSign === "+" ? "＋ (نشانه واریز)" : "－ (نشانه برداشت)"} />
+            )}
+            {result.description && <Row label="شرح" value={result.description} />}
             {(result.fee || 0) > 0 && <Row label="کارمزد" value={`${formatMoney(result.fee || 0)} ریال`} />}
             {result.account ? (
               <Row
@@ -434,10 +469,14 @@ export default function QuickAddPage() {
 
           <ol className="text-[10px] text-slate-500 leading-relaxed space-y-1.5 list-decimal list-inside">
             <li>در اپ Shortcuts (میان‌برها) یک شورتکات جدید بسازید.</li>
+            <li>
+              اکشن <b>Ask for Input</b> (درخواست ورودی) اضافه کنید — سوال: «شرح تراکنش؟» (خالی هم می‌شود رد کرد).
+            </li>
             <li>اکشن <b>Get Clipboard</b> (دریافت کلیپ‌بورد) اضافه کنید.</li>
             <li>
               اکشن <b>Get Contents of URL</b> اضافه کنید — Method: <b>POST</b>، Request Body: <b>JSON</b>،
-              فیلد <code dir="ltr">text</code> = متغیر Clipboard{tokenRequired ? "، فیلد token = توکن" : ""}.
+              فیلد <code dir="ltr">text</code> = متغیر Clipboard، فیلد <code dir="ltr">description</code> = ورودی مرحله اول
+              {tokenRequired ? "، فیلد token = توکن" : ""}.
             </li>
             <li>
               اکشن <b>Show Notification</b> (نمایش اعلان) اضافه کنید و مقدارش را خروجی مرحله قبل بگذارید.

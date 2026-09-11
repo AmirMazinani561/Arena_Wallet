@@ -5,6 +5,7 @@ import { useModalViewportStyle, blurOnEnter } from "@/lib/use-visual-viewport";
 import React, { useState, useEffect } from "react";
 import { Account, Transaction } from "@/types";
 import { getCurrentShamsi, separateThousands, parseAmount } from "@/lib/date-utils";
+import { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID } from "@/lib/pending-categories";
 import {
   X,
   Check,
@@ -29,6 +30,8 @@ interface Props {
   onRefreshAccounts: () => void;
   presetFromAccountId?: string | null;
   presetToAccountId?: string | null;
+  /** اگر داده شود، انتخابگر همان طرف (مبدا/مقصد) بلافاصله باز می‌شود */
+  initialPickerTarget?: "from" | "to" | null;
   onDelete?: (id: string) => void;
 }
 
@@ -90,6 +93,7 @@ export function TransactionModal({
   onRefreshAccounts,
   presetFromAccountId = null,
   presetToAccountId = null,
+  initialPickerTarget = null,
   onDelete,
 }: Props) {
   useLockBodyScroll(isOpen);
@@ -127,13 +131,24 @@ export function TransactionModal({
       setToAccountId(presetToAccountId || "");
     }
     setError(null);
+    // برای تراکنش‌های «در انتظار ثبت»: انتخابگر طرفِ خالی مستقیم باز می‌شود
+    setPickerTarget(initialPickerTarget || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, editTx, presetFromAccountId, presetToAccountId]);
+  }, [isOpen, editTx, presetFromAccountId, presetToAccountId, initialPickerTarget]);
 
   if (!isOpen) return null;
 
   const fromAccount = allAccounts.find((a) => a.id === fromAccountId);
   const toAccount = allAccounts.find((a) => a.id === toAccountId);
+  // طرفی که هنوز سرفصل موقت «در انتظار دسته‌بندی» است (فقط برای تراکنش‌های پیامکی)
+  const pendingSide: "from" | "to" | null =
+    editTx?.status === "pending"
+      ? fromAccountId === PENDING_INCOME_CATEGORY_ID
+        ? "from"
+        : toAccountId === PENDING_EXPENSE_CATEGORY_ID
+        ? "to"
+        : null
+      : null;
   const amountValue = parseAmount(amountText);
   const feeValue = parseAmount(feeText);
 
@@ -216,10 +231,20 @@ export function TransactionModal({
               <button
                 type="button"
                 onClick={() => setPickerTarget("from")}
-                className="w-full p-3 text-right bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 rounded-xl transition flex items-center justify-between gap-2"
+                className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
+                  pendingSide === "from"
+                    ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
+                    : "bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300"
+                }`}
               >
                 <AccountBadge acc={fromAccount} placeholder="انتخاب حساب مبدا…" />
-                <ChevronLeft className="w-4 h-4 text-slate-300 shrink-0" />
+                {pendingSide === "from" ? (
+                  <span className="shrink-0 text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-md px-1.5 py-0.5">
+                    انتخاب کنید
+                  </span>
+                ) : (
+                  <ChevronLeft className="w-4 h-4 text-slate-300 shrink-0" />
+                )}
               </button>
             </div>
 
@@ -228,10 +253,20 @@ export function TransactionModal({
               <button
                 type="button"
                 onClick={() => setPickerTarget("to")}
-                className="w-full p-3 text-right bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 rounded-xl transition flex items-center justify-between gap-2"
+                className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
+                  pendingSide === "to"
+                    ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
+                    : "bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300"
+                }`}
               >
                 <AccountBadge acc={toAccount} placeholder="انتخاب حساب مقصد…" />
-                <ChevronLeft className="w-4 h-4 text-slate-300 shrink-0" />
+                {pendingSide === "to" ? (
+                  <span className="shrink-0 text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-md px-1.5 py-0.5">
+                    انتخاب کنید
+                  </span>
+                ) : (
+                  <ChevronLeft className="w-4 h-4 text-slate-300 shrink-0" />
+                )}
               </button>
             </div>
 
