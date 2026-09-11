@@ -9,13 +9,16 @@ import {
 } from "./client";
 import { hashPassword } from "@/lib/auth-utils";
 import { toShamsiDateString } from "@/lib/date-utils";
+import {
+  PENDING_EXPENSE_CATEGORY_ID,
+  PENDING_INCOME_CATEGORY_ID,
+} from "@/lib/pending-categories";
 import crypto from "crypto";
 
 export const BANK_FEE_CATEGORY_ID = "cat_exp_bank_fee";
 
-/** سرفصل‌های سیستمی تراکنش‌های نیمه‌تمامِ حاصل از پیامک بانکی */
-export const PENDING_EXPENSE_CATEGORY_ID = "cat_pending_expense";
-export const PENDING_INCOME_CATEGORY_ID = "cat_pending_income";
+// بازصادر برای سازگاری با واردکننده‌های فعلی (API ها)؛ مقدارها در pending-categories تعریف شده‌اند
+export { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID };
 
 /* ------------------------------------------------------------------ */
 /*  انواع داده                                                          */
