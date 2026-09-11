@@ -20,9 +20,12 @@ export const dynamic = "force-dynamic";
  * اندپوینت ثبت سریع تراکنش از پیامک بانکی.
  *
  * ورودی (هر سه قالب پشتیبانی می‌شود):
- *   - JSON:    { "text": "متن پیامک", "token": "…", "dryRun": true }
- *   - Form:    text=…&token=…
+ *   - JSON:    { "text": "متن پیامک", "token": "…", "dryRun": true, "description": "شرح دلخواه" }
+ *   - Form:    text=…&token=…&description=…
  *   - متن خام: بدنه درخواست خودِ پیامک است (توکن از هدر یا کوئری)
+ *
+ * اگر description داده شود، به‌جای متن پیامک به‌عنوان شرح تراکنش ذخیره می‌شود؛
+ * در غیر این صورت خودِ متن پیامک شرح خواهد بود.
  *
  * خروجی:
  *   - پیش‌فرض JSON کامل
@@ -74,6 +77,7 @@ export async function POST(req: Request) {
     /* ---------- خواندن بدنه ---------- */
     let text = "";
     let bodyToken = "";
+    let customDescription = "";
     let dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
 
@@ -81,12 +85,14 @@ export async function POST(req: Request) {
       const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
       text = String(body.text ?? "");
       bodyToken = String(body.token ?? "");
+      customDescription = String(body.description ?? "");
       dryRun = dryRun || Boolean(body.dryRun);
     } else if (ctype.includes("form")) {
       const form = await req.formData().catch(() => null);
       if (form) {
         text = String(form.get("text") ?? "");
         bodyToken = String(form.get("token") ?? "");
+        customDescription = String(form.get("description") ?? "");
       }
     } else {
       // بدنه متن خام — ساده‌ترین حالت برای شورتکات
@@ -219,12 +225,16 @@ export async function POST(req: Request) {
     const fee = kind === "withdrawal" ? parsed.fee : 0;
     const fromName = accounts.find((a) => a.id === fromId)?.name || "";
     const toName = accounts.find((a) => a.id === toId)?.name || "";
+    const trimmedDesc = customDescription.trim().slice(0, 500);
+    const finalDescription = trimmedDesc || rawText;
 
     const base = {
       ok: true,
       kind,
       amount: parsed.amount,
+      amountSign: parsed.amountSign,
       fee,
+      description: finalDescription,
       balance: parsed.balance,
       shamsiDate: parsed.shamsiDate,
       hasExplicitDate: parsed.hasExplicitDate,
@@ -255,7 +265,7 @@ export async function POST(req: Request) {
       toAccountId: toId,
       date: new Date(parsed.dateIso),
       shamsiDate: parsed.shamsiDate,
-      description: rawText,
+      description: finalDescription,
       trackingNumber: parsed.tracking,
       status,
       sourceHash: hash,

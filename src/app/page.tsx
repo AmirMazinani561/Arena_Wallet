@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Account, Transaction, AccountType } from "@/types";
+import { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID } from "@/lib/pending-categories";
 import { TopBar } from "@/components/TopBar";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { HomeTab } from "@/components/HomeTab";
@@ -23,6 +24,7 @@ export default function App() {
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingTxs, setPendingTxs] = useState<Transaction[]>([]);
   const [recentLimit, setRecentLimit] = useState<number>(10);
   const [ledgerAccountId, setLedgerAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,8 @@ export default function App() {
   // مودال‌ها
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  // وقتی تراکنش «در انتظار» باز می‌شود، انتخابگر همان طرفِ خالی خودکار باز می‌شود
+  const [txPickerTarget, setTxPickerTarget] = useState<"from" | "to" | null>(null);
   const [presetFromAccountId, setPresetFromAccountId] = useState<string | null>(null);
   const [presetToAccountId, setPresetToAccountId] = useState<string | null>(null);
 
@@ -64,15 +68,18 @@ export default function App() {
     try {
       setLoading(true);
       // فقط تعداد انتخاب‌شده توسط کاربر (۵ تا ۵۰) از تراکنش‌های اخیر خوانده می‌شود
-      const [accRes, txRes] = await Promise.all([
+      const [accRes, txRes, pendingRes] = await Promise.all([
         fetch("/api/accounts"),
         fetch(`/api/transactions?limit=${recentLimit}&offset=0`),
+        fetch("/api/transactions?limit=50&offset=0&status=pending"),
       ]);
       const accData = await accRes.json();
       const txData = await txRes.json();
+      const pendingData = await pendingRes.json().catch(() => ({}));
 
       if (accRes.ok && accData.accounts) setAccounts(accData.accounts);
       if (txRes.ok && txData.transactions) setTransactions(txData.transactions);
+      if (pendingRes.ok && pendingData.transactions) setPendingTxs(pendingData.transactions);
       setRefreshKey((k) => k + 1);
     } catch (err) {
       console.error("Error loading wallet data:", err);
@@ -107,6 +114,18 @@ export default function App() {
 
   const handleEditTx = (tx: Transaction) => {
     setEditingTx(tx);
+    setTxPickerTarget(null);
+    setPresetFromAccountId(null);
+    setPresetToAccountId(null);
+    setIsTxModalOpen(true);
+  };
+
+  /** باز کردن تراکنش «در انتظار ثبت» — انتخابگرِ همان طرفِ خالی مستقیم باز می‌شود */
+  const handleOpenPendingTx = (tx: Transaction) => {
+    setEditingTx(tx);
+    if (tx.fromAccountId === PENDING_INCOME_CATEGORY_ID) setTxPickerTarget("from");
+    else if (tx.toAccountId === PENDING_EXPENSE_CATEGORY_ID) setTxPickerTarget("to");
+    else setTxPickerTarget(null);
     setPresetFromAccountId(null);
     setPresetToAccountId(null);
     setIsTxModalOpen(true);
@@ -282,6 +301,8 @@ export default function App() {
                 <HomeTab
                   accounts={accounts}
                   transactions={transactions}
+                  pendingTxs={pendingTxs}
+                  onSelectPendingTx={handleOpenPendingTx}
                   recentLimit={recentLimit}
                   onChangeRecentLimit={handleChangeRecentLimit}
                   onOpenNewTx={() => handleOpenNewTx()}
@@ -419,9 +440,13 @@ export default function App() {
 
       <TransactionModal
         isOpen={isTxModalOpen}
-        onClose={() => setIsTxModalOpen(false)}
+        onClose={() => {
+          setIsTxModalOpen(false);
+          setTxPickerTarget(null);
+        }}
         onSuccess={loadData}
         editTx={editingTx}
+        initialPickerTarget={txPickerTarget}
         allAccounts={accounts}
         onRefreshAccounts={loadData}
         presetFromAccountId={presetFromAccountId}

@@ -26,6 +26,8 @@ export interface ParsedSms {
   kind: SmsKind;
   amount: number;
   fee: number;
+  /** علامت صریح کنار مبلغ در متن پیامک (اگر باشد) — قوی‌ترین نشانه واریز/برداشت */
+  amountSign: "+" | "-" | null;
   balance: number | null;
   dateIso: string;
   shamsiDate: string;
@@ -67,6 +69,7 @@ export function normalizeSmsText(raw: string): string {
   s = s.replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)));
   s = s.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
   s = s.replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/[ةۀ]/g, "ه");
+  s = s.replace(/[−–—]/g, "-");
   s = s.replace(/٬/g, ",");
   s = s.replace(/[،؛]/g, ";");
   s = s.replace(/\u00a0/g, " ");
@@ -86,6 +89,7 @@ export function tokenLast4(token: string): string {
 /** کلیدواژه‌های واریز با وزن امتیاز */
 const DEPOSIT_HINTS: [RegExp, number][] = [
   [/واریز/g, 3],
+  [/نشست/g, 3],
   [/وصول/g, 3],
   [/انتقال\s+از/g, 2],
   [/به\s+حساب\s+شما/g, 2],
@@ -96,6 +100,7 @@ const DEPOSIT_HINTS: [RegExp, number][] = [
 /** کلیدواژه‌های برداشت/هزینه با وزن امتیاز */
 const WITHDRAW_HINTS: [RegExp, number][] = [
   [/برداشت/g, 3],
+  [/پرید/g, 3],
   [/خرید/g, 3],
   [/پرداخت/g, 2],
   [/انتقال\s+(?:وجه\s+)?به/g, 2],
@@ -155,6 +160,7 @@ export function parseBankSms(raw: string): ParsedSms {
     kind: "unknown",
     amount: 0,
     fee: 0,
+    amountSign: null,
     balance: null,
     dateIso: new Date().toISOString(),
     shamsiDate: toShamsiDateString(new Date()),
@@ -182,14 +188,29 @@ export function parseBankSms(raw: string): ParsedSms {
   };
 
   /* ---------- ۱) مبلغ / کارمزد / مانده ---------- */
-  const mAmount = normalized.match(/مبلغ\s*[:;()\-]*\s*([\d,]{3,})/);
+  // گروه اول: علامت اختیاری قبل از مبلغ («مبلغ:-4,500,000» یعنی برداشت)
+  const mAmount = normalized.match(/مبلغ\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/);
   const mFee = normalized.match(/کارمزد\s*[:;()\-]*\s*([\d,]{3,})/);
   const mBalance = normalized.match(/مانده[^;\d]*([\d,]{3,})/);
   mark(mAmount);
   mark(mFee);
   mark(mBalance);
 
-  const labeledAmount = mAmount ? toNumber(mAmount[1]) : 0;
+  const labeledAmount = mAmount ? toNumber(mAmount[2]) : 0;
+
+  // علامت کنار مبلغ: اول قبل از عدد، وگرنه بلافاصله بعد از عدد —
+  // علامتِ بعد از عدد فقط وقتی معتبر است که به حرف نچسبیده باشد
+  // (تا خط‌تیره جداکننده مثل «4,500,000-تاریخ» اشتباه گرفته نشود)
+  let amountSign: "+" | "-" | null = null;
+  if (mAmount) {
+    if (mAmount[1] === "+" || mAmount[1] === "-") {
+      amountSign = mAmount[1];
+    } else if (mAmount.index !== undefined) {
+      const after = normalized.slice(mAmount.index + mAmount[0].length);
+      const tm = after.match(/^\s*([+\-])(?!\d)(?![\s\u00a0]*[\p{L}])/u);
+      if (tm) amountSign = tm[1] as "+" | "-";
+    }
+  }
   const labeledFee = mFee ? toNumber(mFee[1]) : 0;
   const balance = mBalance ? toNumber(mBalance[1]) : null;
 
@@ -350,6 +371,9 @@ export function parseBankSms(raw: string): ParsedSms {
     let score = 0;
     for (const [re, w] of DEPOSIT_HINTS) score += [...normalized.matchAll(re)].length * w;
     for (const [re, w] of WITHDRAW_HINTS) score -= [...normalized.matchAll(re)].length * w;
+    // علامت صریح کنار مبلغ، قوی‌ترین نشانه است و بر کلیدواژه‌ها غلبه می‌کند
+    if (amountSign === "+") score += 5;
+    else if (amountSign === "-") score -= 5;
     if (score >= 2) kind = "deposit";
     else if (score <= -2) kind = "withdrawal";
   }
@@ -360,6 +384,7 @@ export function parseBankSms(raw: string): ParsedSms {
     kind,
     amount,
     fee,
+    amountSign,
     balance,
     dateIso: date.toISOString(),
     shamsiDate: toShamsiDateString(date),

@@ -3,12 +3,14 @@
 import React from "react";
 import { Account, Transaction } from "@/types";
 import { formatMoney, getCurrentShamsi } from "@/lib/date-utils";
-import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, Calendar, Plus } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ArrowRightLeft, Calendar, Plus, Hourglass } from "lucide-react";
 import { FavoritesList } from "./FavoritesList";
 
 interface Props {
   accounts: Account[];
   transactions: Transaction[];
+  pendingTxs: Transaction[];
+  onSelectPendingTx: (tx: Transaction) => void;
   recentLimit: number;
   onChangeRecentLimit: (n: number) => void;
   onOpenNewTx: () => void;
@@ -27,6 +29,8 @@ function accLabel(a?: { name: string; parentName?: string } | null): string {
 export function HomeTab({
   accounts,
   transactions,
+  pendingTxs,
+  onSelectPendingTx,
   recentLimit,
   onChangeRecentLimit,
   onOpenNewTx,
@@ -135,6 +139,90 @@ export function HomeTab({
           </div>
         }
       />
+
+      {/* تراکنش‌های در انتظار ثبت — ثبت‌شده از پیامک که طرف دومشان مشخص نشده */}
+      {pendingTxs.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              تراکنش‌های در انتظار ثبت
+            </h3>
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+              {pendingTxs.length} مورد
+            </span>
+          </div>
+          <div className="ios-card divide-y divide-slate-100 overflow-hidden border-amber-200/70">
+            {pendingTxs.map((tx) => {
+              const isExp = tx.type === "expense";
+              const isInc = tx.type === "income";
+
+              return (
+                <div
+                  key={tx.id}
+                  onClick={() => onSelectPendingTx(tx)}
+                  className="p-3 hover:bg-amber-50/60 cursor-pointer transition flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        isExp
+                          ? "bg-rose-50 text-rose-600"
+                          : isInc
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-amber-50 text-amber-600"
+                      }`}
+                    >
+                      {isExp ? (
+                        <ArrowDownRight className="w-4 h-4" />
+                      ) : isInc ? (
+                        <ArrowUpRight className="w-4 h-4" />
+                      ) : (
+                        <Hourglass className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="truncate">
+                      <div className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                        <span className="truncate">
+                          {tx.description || (isExp ? "پرداخت هزینه" : isInc ? "دریافت درآمد" : "تراکنش")}
+                        </span>
+                        <span className="shrink-0 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5">
+                          در انتظار
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                        <span>{tx.shamsiDate}</span>
+                        <span>•</span>
+                        <span className="truncate">
+                          {accLabel(tx.fromAccount)} ⟵ {accLabel(tx.toAccount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-left shrink-0">
+                    <div
+                      className={`text-xs font-extrabold dir-ltr ${
+                        isExp ? "text-rose-600" : isInc ? "text-emerald-600" : "text-amber-600"
+                      }`}
+                    >
+                      {formatMoney(tx.amount)}
+                    </div>
+                    {(tx.fee || 0) > 0 && (
+                      <div className="text-[9px] text-amber-600 dir-ltr">
+                        کارمزد {formatMoney(tx.fee || 0)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-[10px] text-slate-400 px-1 leading-relaxed">
+            این تراکنش‌ها از پیامک ثبت شده‌اند و طرف دومشان مشخص نیست — برای تکمیل، روی هر مورد بزنید.
+          </div>
+        </div>
+      )}
 
       {/* سرفصل‌های منتخب — قابل چینش */}
       {favoriteCategories.length > 0 && (

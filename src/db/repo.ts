@@ -716,6 +716,7 @@ function mapTransaction(r: Record<string, unknown>): TransactionRow {
 export interface TxFilter {
   id?: string | null;
   type?: string | null;
+  status?: string | null;
   accountIds?: string[];
   startDate?: string | null;
   endDate?: string | null;
@@ -736,6 +737,11 @@ function buildTxWhere(filter: TxFilter): { clause: string; params: unknown[] } {
   if (filter.type) {
     conditions.push("t.type = ?");
     params.push(filter.type);
+  }
+
+  if (filter.status) {
+    conditions.push("t.status = ?");
+    params.push(filter.status);
   }
 
   if (filter.accountIds && filter.accountIds.length > 0) {
