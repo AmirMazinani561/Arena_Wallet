@@ -13,6 +13,10 @@ import crypto from "crypto";
 
 export const BANK_FEE_CATEGORY_ID = "cat_exp_bank_fee";
 
+/** سرفصل‌های سیستمی تراکنش‌های نیمه‌تمامِ حاصل از پیامک بانکی */
+export const PENDING_EXPENSE_CATEGORY_ID = "cat_pending_expense";
+export const PENDING_INCOME_CATEGORY_ID = "cat_pending_income";
+
 /* ------------------------------------------------------------------ */
 /*  انواع داده                                                          */
 /* ------------------------------------------------------------------ */
@@ -42,6 +46,10 @@ export interface TransactionRow {
   shamsiDate: string;
   description: string | null;
   trackingNumber: string | null;
+  /** وضعیت تراکنش: active یا pending (در انتظار تکمیل از پیامک) */
+  status: string;
+  /** هش متن پیامک مبدأ (برای تشخیص تکراری) */
+  sourceHash: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -216,6 +224,10 @@ async function ensureColumn(table: string, column: string, pgDef: string, myDef:
 async function ensureColumns() {
   await ensureColumn("transactions", "fee", "double precision NOT NULL DEFAULT 0", "double NOT NULL DEFAULT 0");
   await ensureColumn("accounts", "sort_order", "integer NOT NULL DEFAULT 0", "int NOT NULL DEFAULT 0");
+  // وضعیت تراکنش: active (کامل) یا pending (ثبت‌شده از پیامک، در انتظار تکمیل طرف دوم)
+  await ensureColumn("transactions", "status", "varchar(20) NOT NULL DEFAULT 'active'", "varchar(20) NOT NULL DEFAULT 'active'");
+  // هش متن پیامک برای جلوگیری از ثبت تکراری
+  await ensureColumn("transactions", "source_hash", "varchar(64) NULL", "varchar(64) NULL");
 }
 
 let bootstrapPromise: Promise<void> | null = null;
@@ -253,6 +265,7 @@ export function ensureDatabase(): Promise<void> {
         }
         // ستون‌های افزوده‌شده در نسخه‌های جدید (فقط ADD COLUMN — بدون تغییر داده)
         await ensureColumns();
+        await ensureSystemCategories();
         bootstrapDone = true;
         return;
       }
@@ -264,6 +277,7 @@ export function ensureDatabase(): Promise<void> {
       await ensureColumns();
       await ensureIndexes();
       await seedInitialData();
+      await ensureSystemCategories();
     })()
       .then(() => {
         bootstrapDone = true;
@@ -359,23 +373,58 @@ async function seedInitialData() {
     }
   }
 
-  // سرفصل سیستمی کارمزد بانکی
-  const feeCat = await query<{ c: number }>(
-    `SELECT COUNT(*) AS c FROM accounts WHERE id = ?`,
-    [BANK_FEE_CATEGORY_ID]
-  );
-  if (readNumber(feeCat[0]?.c) === 0) {
-    await insertIfAbsent(
-      `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, detail_info, icon, color)
-       VALUES (?, 'expense', ?, 0, ?, ?, ?, 'percent', '#64748b')`,
-      [
-        BANK_FEE_CATEGORY_ID,
-        "کارمزد و هزینه‌های بانکی",
-        boolParam(false),
-        boolParam(true),
-        "سرفصل سیستمی – کارمزدها به صورت خودکار در این سرفصل تجمیع می‌شوند.",
-      ]
-    );
+  // سرفصل‌های سیستمی در ensureSystemCategories ساخته می‌شوند
+  // (هم روی دیتابیس تازه و هم روی دیتابیس‌های موجود اجرا می‌شود)
+}
+
+/**
+ * سرفصل‌های سیستمی: کارمزد بانکی + دسته‌بندی موقت پیامک‌ها.
+ * این تابع idempotent است و در هر بوت (حتی روی دیتابیس‌های موجود) اجرا می‌شود.
+ */
+async function ensureSystemCategories() {
+  const systemCats: {
+    id: string;
+    type: string;
+    name: string;
+    icon: string;
+    color: string;
+    detail: string;
+  }[] = [
+    {
+      id: BANK_FEE_CATEGORY_ID,
+      type: "expense",
+      name: "کارمزد و هزینه‌های بانکی",
+      icon: "percent",
+      color: "#64748b",
+      detail: "سرفصل سیستمی – کارمزدها به صورت خودکار در این سرفصل تجمیع می‌شوند.",
+    },
+    {
+      id: PENDING_EXPENSE_CATEGORY_ID,
+      type: "expense",
+      name: "در انتظار دسته‌بندی (هزینه)",
+      icon: "clock",
+      color: "#d97706",
+      detail: "سرفصل سیستمی – هزینه‌های ثبت‌شده از پیامک که سرفصل آن‌ها هنوز انتخاب نشده است.",
+    },
+    {
+      id: PENDING_INCOME_CATEGORY_ID,
+      type: "income",
+      name: "در انتظار دسته‌بندی (درآمد)",
+      icon: "clock",
+      color: "#d97706",
+      detail: "سرفصل سیستمی – درآمدهای ثبت‌شده از پیامک که منبع آن‌ها هنوز مشخص نشده است.",
+    },
+  ];
+
+  for (const c of systemCats) {
+    const found = await query<{ c: number }>(`SELECT COUNT(*) AS c FROM accounts WHERE id = ?`, [c.id]);
+    if (readNumber(found[0]?.c) === 0) {
+      await insertIfAbsent(
+        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, detail_info, icon, color)
+         VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+        [c.id, c.type, c.name, boolParam(false), boolParam(true), c.detail, c.icon, c.color]
+      );
+    }
   }
 }
 
@@ -656,6 +705,8 @@ function mapTransaction(r: Record<string, unknown>): TransactionRow {
     shamsiDate: String(r.shamsi_date),
     description: r.description ? String(r.description) : null,
     trackingNumber: r.tracking_number ? String(r.tracking_number) : null,
+    status: r.status ? String(r.status) : "active",
+    sourceHash: r.source_hash ? String(r.source_hash) : null,
   };
 }
 
@@ -772,11 +823,15 @@ export async function createTransaction(data: {
   shamsiDate: string;
   description: string | null;
   trackingNumber: string | null;
+  /** وضعیت تراکنش — پیش‌فرض active؛ تراکنش‌های پیامکی pending هستند */
+  status?: string;
+  /** هش متن پیامک مبدأ (اختیاری، برای تشخیص تکراری) */
+  sourceHash?: string | null;
 }): Promise<TransactionRow> {
   const id = `tx_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   await execute(
-    `INSERT INTO transactions (id, type, amount, fee, from_account_id, to_account_id, date, shamsi_date, description, tracking_number)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO transactions (id, type, amount, fee, from_account_id, to_account_id, date, shamsi_date, description, tracking_number, status, source_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.type,
@@ -788,6 +843,8 @@ export async function createTransaction(data: {
       data.shamsiDate,
       data.description,
       data.trackingNumber,
+      data.status || "active",
+      data.sourceHash ?? null,
     ]
   );
   const created = await getTransaction(id);
@@ -835,6 +892,23 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: string): Promise<void> {
   await execute(`DELETE FROM transactions WHERE id = ?`, [id]);
+}
+
+/**
+ * جستجوی تراکنش تکراری بر اساس هش متن پیامک (پنجره ۷ روزه).
+ * از ثبت دوباره یک پیامک فورواردشده جلوگیری می‌کند.
+ */
+export async function findRecentDuplicateByHash(hash: string): Promise<TransactionRow | null> {
+  const rows = await query(
+    `SELECT * FROM transactions WHERE source_hash = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1`,
+    [hash, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)]
+  );
+  return rows.length ? mapTransaction(rows[0]) : null;
+}
+
+/** تغییر وضعیت تراکنش (مثلاً از pending به active پس از تکمیل طرف دوم) */
+export async function setTransactionStatus(id: string, status: string): Promise<void> {
+  await execute(`UPDATE transactions SET status = ? WHERE id = ?`, [status, id]);
 }
 
 /* ------------------------------------------------------------------ */

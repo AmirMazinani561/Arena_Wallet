@@ -11,6 +11,7 @@ import {
   LogOut,
   Sparkles,
   HelpCircle,
+  MessageSquareText,
 } from "lucide-react";
 import { BackupModal } from "./BackupModal";
 import { LoginModal } from "./LoginModal";
@@ -91,6 +92,27 @@ export function SettingsTab({ user, onLogout, onRefreshAllData }: Props) {
             </div>
             <span className="text-xs font-semibold text-sky-600">اقدام ❯</span>
           </button>
+
+          {/* Quick Add from SMS */}
+          <a
+            href="/quick-add"
+            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                <MessageSquareText className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-800">
+                  ثبت سریع از پیامک (آزمایشی)
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  تحلیل خودکار پیامک بانکی، ثبت در انتظار و راهنمای شورتکات iOS
+                </div>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-sky-600">باز کردن ❯</span>
+          </a>
 
           {/* Change Password */}
           <button

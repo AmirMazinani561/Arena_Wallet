@@ -8,7 +8,10 @@ import {
   updateTransaction,
   deleteTransaction,
   getTransaction,
+  setTransactionStatus,
   AccountRow,
+  PENDING_EXPENSE_CATEGORY_ID,
+  PENDING_INCOME_CATEGORY_ID,
 } from "@/db/repo";
 import { toShamsiDateString, shamsiToGregorian } from "@/lib/date-utils";
 
@@ -257,6 +260,18 @@ export async function PUT(req: Request) {
       trackingNumber:
         trackingNumber !== undefined ? (trackingNumber ? String(trackingNumber).trim() : null) : undefined,
     });
+
+    // ارتقای تراکنش‌های نیمه‌تمام (ثبت‌شده از پیامک):
+    // به محض اینکه طرف دوم از سرفصل موقت به حساب/سرفصل واقعی تغییر کند،
+    // وضعیت از pending به active می‌رود و از صف انتظار خارج می‌شود.
+    if (existing.status === "pending") {
+      const stillPending = [finalFromId, finalToId].some(
+        (sid) => sid === PENDING_EXPENSE_CATEGORY_ID || sid === PENDING_INCOME_CATEGORY_ID
+      );
+      if (!stillPending) {
+        await setTransactionStatus(String(id), "active");
+      }
+    }
 
     return NextResponse.json({ success: true, message: "تراکنش با موفقیت ویرایش شد." });
   } catch (err: unknown) {
