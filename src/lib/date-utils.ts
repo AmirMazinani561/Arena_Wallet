@@ -85,35 +85,24 @@ export function buildShamsi(jy: number, jm: number, jd: number): string {
   return `${jy}/${String(jm).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
 }
 
+/** تبدیل ارقام فارسی/عربی به انگلیسی تا تایپ با کیبورد فارسی هم پذیرفته شود */
+export function toEnglishDigits(value: string): string {
+  return value
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
 /** جداکننده هزارگان برای ورودی مبلغ (ریال) */
 export function separateThousands(value: string): string {
-  const digitsOnly = value.replace(/[^\d]/g, "");
+  const digitsOnly = toEnglishDigits(value).replace(/[^\d]/g, "");
   if (!digitsOnly) return "";
   return digitsOnly.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 /** تبدیل رشته دارای جداکننده به عدد خام */
 export function parseAmount(value: string): number {
-  const digitsOnly = value.replace(/[^\d]/g, "");
+  const digitsOnly = toEnglishDigits(value).replace(/[^\d]/g, "");
   return digitsOnly ? parseInt(digitsOnly, 10) : 0;
-}
-
-/** تبدیل عدد به حروف ریالی خلاصه (میلیون / میلیارد) جهت راهنمای کاربر */
-export function amountToWords(amount: number): string {
-  if (!amount) return "";
-  if (amount >= 1_000_000_000) {
-    const v = amount / 1_000_000_000;
-    return `${v.toLocaleString("fa-IR", { maximumFractionDigits: 3 })} میلیارد ریال`;
-  }
-  if (amount >= 1_000_000) {
-    const v = amount / 1_000_000;
-    return `${v.toLocaleString("fa-IR", { maximumFractionDigits: 3 })} میلیون ریال`;
-  }
-  if (amount >= 1_000) {
-    const v = amount / 1_000;
-    return `${v.toLocaleString("fa-IR", { maximumFractionDigits: 3 })} هزار ریال`;
-  }
-  return `${formatMoney(amount)} ریال`;
 }
 
 export function toPersianDigits(n: number | string): string {

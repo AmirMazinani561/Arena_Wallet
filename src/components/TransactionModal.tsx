@@ -279,7 +279,7 @@ export function TransactionModal({
             {/* ۳. کارمزد */}
             <div>
               <label className={`${labelCls} text-center`}>کارمزد</label>
-              <AmountInput value={feeText} onChange={(f) => setFeeText(f)} placeholder="۰" showHint={false} center />
+              <AmountInput value={feeText} onChange={(f) => setFeeText(f)} placeholder="۰" center />
             </div>
 
             {/* ۴. تاریخ */}
