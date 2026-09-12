@@ -3,9 +3,9 @@
  *
  * طراحی به صورت «جدول‌کلیدواژه‌ای» است تا با هر بانکی کار کند:
  *   ۱. نرمال‌سازی متن (ارقام فارسی/عربی، ی/ک عربی، جداکننده‌ها، نیم‌فاصله)
- *   ۲. استخراج مبلغ / کارمزد / مانده با برچسب‌های رایج («مبلغ»، «کارمزد»، «مانده»)
+ *   ۲. استخراج مبلغ / کارمزد / مانده با برچسب‌های رایج («مبلغ»، «کارمزد»، «مانده»/«موجودی») و علامت +/−
  *   ۳. تشخیص نوع (واریز/برداشت/کارمزد) با امتیازدهی کلیدواژه‌ها
- *   ۴. استخراج تاریخ (شمسی یا میلادی) و ساعت
+ *   ۴. استخراج تاریخ (کامل شمسی/میلادی یا فشرده MMDD مثل «0620-14:48») و ساعت
  *   ۵. استخراج توکن‌های کارت/حساب و سمتِ آن‌ها («از …» / «به …»)
  *
  * این ماژول کاملاً خالص (Pure) است و به دیتابیس وابسته نیست؛
@@ -151,6 +151,27 @@ function toNumber(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** نوع صریح تراکنش که کاربر در شورتکات انتخاب می‌کند */
+export type ExplicitKind = "deposit" | "withdrawal" | "fee";
+
+/**
+ * پارس نوع صریح ارسالی از شورتکات/کلاینت (body.kind یا ?kind=...).
+ * مقادیر انگلیسی (با هر بزرگی/کوچکی حروف) و فارسی پذیرفته می‌شود؛
+ * هر چیز دیگری null برمی‌گرداند تا پارسر خودکار تصمیم بگیرد.
+ */
+export function parseExplicitKind(v: unknown): ExplicitKind | null {
+  if (typeof v !== "string") return null;
+  const low = v.trim().toLowerCase();
+  if (low === "deposit") return "deposit";
+  if (low === "withdrawal") return "withdrawal";
+  if (low === "fee") return "fee";
+  const s = normalizeSmsText(v).trim();
+  if (s === "واریز") return "deposit";
+  if (s === "برداشت") return "withdrawal";
+  if (s === "کارمزد") return "fee";
+  return null;
+}
+
 export function parseBankSms(raw: string): ParsedSms {
   const normalized = normalizeSmsText(raw);
 
@@ -191,7 +212,7 @@ export function parseBankSms(raw: string): ParsedSms {
   // گروه اول: علامت اختیاری قبل از مبلغ («مبلغ:-4,500,000» یعنی برداشت)
   const mAmount = normalized.match(/مبلغ\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/);
   const mFee = normalized.match(/کارمزد\s*[:;()\-]*\s*([\d,]{3,})/);
-  const mBalance = normalized.match(/مانده[^;\d]*([\d,]{3,})/);
+  const mBalance = normalized.match(/(?:مانده|موجودی)[^;\d]*([\d,]{3,})/);
   mark(mAmount);
   mark(mFee);
   mark(mBalance);
@@ -199,16 +220,22 @@ export function parseBankSms(raw: string): ParsedSms {
   const labeledAmount = mAmount ? toNumber(mAmount[2]) : 0;
 
   // علامت کنار مبلغ: اول قبل از عدد، وگرنه بلافاصله بعد از عدد —
-  // علامتِ بعد از عدد فقط وقتی معتبر است که به حرف نچسبیده باشد
-  // (تا خط‌تیره جداکننده مثل «4,500,000-تاریخ» اشتباه گرفته نشود)
+  // «+» تقریباً همیشه علامت واریز است («80,000,000+ریال» با یا بدون فاصله)؛
+  // «−» هم علامت برداشت است («200,000-») و فقط وقتی رد می‌شود که به کلمه یا رقم بچسبد («750,000-تاریخ»)
   let amountSign: "+" | "-" | null = null;
   if (mAmount) {
     if (mAmount[1] === "+" || mAmount[1] === "-") {
       amountSign = mAmount[1];
     } else if (mAmount.index !== undefined) {
       const after = normalized.slice(mAmount.index + mAmount[0].length);
-      const tm = after.match(/^\s*([+\-])(?!\d)(?![\s\u00a0]*[\p{L}])/u);
-      if (tm) amountSign = tm[1] as "+" | "-";
+      const tm = after.match(/^([+\-])/);
+      if (tm) {
+        const s = tm[1] as "+" | "-";
+        const nx = after.length > 1 ? after[1] : "";
+        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(after.slice(1, 8)) || !/[\p{L}0-9]/u.test(nx)) {
+          amountSign = s;
+        }
+      }
     }
   }
   const labeledFee = mFee ? toNumber(mFee[1]) : 0;
@@ -257,7 +284,49 @@ export function parseBankSms(raw: string): ParsedSms {
       hasExplicitDate = true;
       mark(dm);
     }
-  } else if (hasExplicitTime) {
+  }
+
+  // تاریخ فشرده بدون سال (قالب برخی بانک‌ها مثل «0620-14:48» یا «05/30») —
+  // فرض: ماه و روز شمسی از سال جاری؛ اگر در آینده بیفتد، متعلق به سال قبل است
+  if (!hasExplicitDate) {
+    const mMMDDt = normalized.match(/(?:^|[\s;_])(0[1-9]|1[0-2])([0-2][0-9]|3[01])[\s_]*[-_][\s_]*(\d{1,2}):(\d{2})/);
+    const mMMDDs = mMMDDt
+      ? null
+      : normalized.match(/(?:^|[\s;_])(0[1-9]|1[0-2])[\/._]([0-2][0-9]|3[01])(?![\d\/.])/);
+    const mm = mMMDDt || mMMDDs;
+    if (mm) {
+      const mo = parseInt(mm[1], 10);
+      let dd = parseInt(mm[2], 10);
+      if (mo >= 1 && mo <= 12 && dd >= 1 && dd <= 31) {
+        const nowJ = jalaali.toJalaali(new Date());
+        let jy = nowJ.jy;
+        const pad2 = (n: number) => String(n).padStart(2, "0");
+        dd = Math.min(dd, jalaali.jalaaliMonthLength(jy, mo));
+        // اگر تاریخ به‌دست‌آمده در آینده است، متعلق به سال قبل است
+        if (`${jy}/${pad2(mo)}/${pad2(dd)}` > toShamsiDateString(new Date())) jy -= 1;
+        dd = Math.min(dd, jalaali.jalaaliMonthLength(jy, mo));
+        const g = jalaali.toGregorian(jy, mo, dd);
+        let hh = hour;
+        let mi2 = minute;
+        if (mMMDDt) {
+          const h3 = parseInt(mm[3], 10);
+          const mi3 = parseInt(mm[4], 10);
+          if (h3 <= 23 && mi3 <= 59) {
+            hh = h3;
+            mi2 = mi3;
+          }
+        }
+        date =
+          hh >= 0
+            ? new Date(Date.UTC(g.gy, g.gm - 1, g.gd, hh - 3, mi2 - 30))
+            : new Date(Date.UTC(g.gy, g.gm - 1, g.gd, 12, 0));
+        hasExplicitDate = true;
+        mark(mm);
+      }
+    }
+  }
+
+  if (!hasExplicitDate && hasExplicitTime) {
     // فقط ساعت ذکر شده — تاریخ امروز در نظر گرفته می‌شود
     const now = new Date();
     date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour - 3, minute - 30));
@@ -279,7 +348,7 @@ export function parseBankSms(raw: string): ParsedSms {
   const cardTokenSet = new Set<string>();
 
   // «از/به کارت|حساب|شبا 1234-…» — جهت انتقال را مشخص می‌کند
-  const SIDE_RE = /(?:^|[\s;])(از|به)\s*(?:شماره\s*)?(?:کارت|حساب|شبا)?\s*[:;\-]*\s*([0-9][0-9\-*]{3,})/g;
+  const SIDE_RE = /(?:^|[\s;])(از|به)\s*(?:شماره\s*)?(?:کارت|حساب|شبا)?\s*[:;\-]*\s*([0-9][0-9.\-*]{3,})/g;
   for (const m of normalized.matchAll(SIDE_RE)) {
     const token = m[2];
     if (m[1] === "از") fromSideTokens.push(token);
@@ -290,7 +359,7 @@ export function parseBankSms(raw: string): ParsedSms {
   }
 
   // توکن‌های دارای برچسب کارت/حساب بدون حرف اضافه («برداشت کارت 6219-…»)
-  const CARD_KW_RE = /(?:کارت|حساب|شبا)\s*[:;\-]*\s*([0-9][0-9\-*]{3,})/g;
+  const CARD_KW_RE = /(?:کارت|حساب|شبا)\s*[:;\-]*\s*([0-9][0-9.\-*]{3,})/g;
   for (const m of normalized.matchAll(CARD_KW_RE)) {
     cardTokenSet.add(m[1]);
     const start = m.index ?? 0;
@@ -302,6 +371,32 @@ export function parseBankSms(raw: string): ParsedSms {
     cardTokenSet.add(m[1]);
     const start = m.index ?? 0;
     consumed.push({ start, end: start + m[0].length });
+  }
+
+  // شماره حساب نقطه‌دار بدون برچسب («292.8000.10195601.1» پاسارگاد) —
+  // باید حتماً نقطه داشته باشد (تا مبلغ ساده، حساب خوانده نشود) و روی بازه مصرف‌شده (مثل تاریخ) نیفتد
+  for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9][0-9.]{4,})(?=[\s;_]|$)/g)) {
+    const tok = m[1].replace(/\.+$/, "");
+    if (tok.length < 5 || !tok.includes(".")) continue;
+    const start = (m.index ?? 0) + m[0].length - m[1].length;
+    const range = { start, end: start + tok.length };
+    if (consumed.some((r) => overlaps(r, range))) continue;
+    cardTokenSet.add(tok);
+    consumed.push(range);
+  }
+
+  // شماره حساب بلند (۱۰ تا ۱۶ رقم) بدون برچسب («80000609969009» پارسیان) —
+  // اگر قبلش برچسب مبلغ/انتقال یا بعدش واحد پول باشد، مبلغ است نه شماره حساب
+  for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9]{10,16})(?=[\s;_]|$)/g)) {
+    const start = (m.index ?? 0) + m[0].length - m[1].length;
+    const range = { start, end: start + m[1].length };
+    if (consumed.some((r) => overlaps(r, range))) continue;
+    const beforeTxt = normalized.slice(Math.max(0, start - 12), start);
+    const afterTxt = normalized.slice(range.end, range.end + 12);
+    if (/مبلغ|انتقال|برداشت|واریز|کارمزد/.test(beforeTxt)) continue;
+    if (/ریال|ريال|تومان|تومن/.test(afterTxt)) continue;
+    cardTokenSet.add(m[1]);
+    consumed.push(range);
   }
 
   /* ---------- ۵) طرف مقابل ---------- */
@@ -324,17 +419,45 @@ export function parseBankSms(raw: string): ParsedSms {
   /* ---------- ۷) مبلغ اصلی (با فالبک بدون برچسب) ---------- */
   let amount = labeledAmount;
   if (!amount) {
+    // بدون برچسب «مبلغ»: بزرگ‌ترین عدد آزاد — با رد کردن تکه‌های شماره کارت/حساب و شماره‌های مرجع
+    // و خواندن علامت چسبیده به عدد («-500,000» یا «100,000,000+» با یا بدون فاصله تا ریال)
     let best = 0;
+    let bestSign: "+" | "-" | null = null;
     for (const m of normalized.matchAll(/[\d,]{4,}/g)) {
       const start = m.index ?? 0;
       const range = { start, end: start + m[0].length };
       if (consumed.some((r) => overlaps(r, range))) continue;
+      const chBefore = start > 0 ? normalized[start - 1] : "";
+      const chBefore2 = start > 1 ? normalized[start - 2] : "";
+      const chAfter = range.end < normalized.length ? normalized[range.end] : "";
+      const chAfter2 = range.end + 1 < normalized.length ? normalized[range.end + 1] : "";
+      // اگر با جداکننده به ارقام دیگری وصل است، تکه‌ای از یک شماره (کارت/حساب) است نه مبلغ
+      if ("-./:*".includes(chBefore) && /[0-9]/.test(chBefore2)) continue;
+      if ("./:*".includes(chAfter) && /[0-9]/.test(chAfter2)) continue;
+      // شماره پیگیری/مرجع/سند، مبلغ نیست
+      const beforeWord = normalized.slice(Math.max(0, start - 10), start);
+      if (/پیگیری|مرجع|ارجاع|سند/.test(beforeWord)) continue;
       const pure = m[0].replace(/,/g, "");
       if (pure.length > 11) continue; // احتمالاً شماره پیگیری/مرجع
       const v = toNumber(m[0]);
-      if (v > best) best = v;
+      if (v <= best) continue;
+      best = v;
+      bestSign = null;
+      // علامت چسبیده قبل از عدد — به شرطی که خودش دنباله ارقام نباشد (مثل تکه شماره کارت)
+      if ((chBefore === "+" || chBefore === "-") && !/[0-9]/.test(chBefore2)) {
+        bestSign = chBefore;
+      } else if (chAfter === "+") {
+        // «+» بعد از عدد علامت واریز است، حتی چسبیده به ریال («80,000,000+ریال»)
+        if (!/[0-9]/.test(chAfter2)) bestSign = "+";
+      } else if (chAfter === "-") {
+        // «−» بعد از عدد علامت برداشت است («200,000-» حتی چسبیده به ریال)؛
+        // فقط وقتی رد می‌شود که به رقم یا کلمه غیرپولی بچسبد («750,000-تاریخ»)
+        const afterWord = normalized.slice(range.end + 1, range.end + 8);
+        if (chAfter2 === "" || /^(?:ریال|ريال|تومان|تومن)/.test(afterWord) || !/[\p{L}0-9]/u.test(chAfter2)) bestSign = "-";
+      }
     }
     amount = best;
+    amountSign = bestSign;
   }
 
   if (amount < 100) {
