@@ -11,7 +11,7 @@ import {
   PENDING_EXPENSE_CATEGORY_ID,
   PENDING_INCOME_CATEGORY_ID,
 } from "@/db/repo";
-import { parseBankSms, normalizeSmsText, tokenLast4 } from "@/lib/sms-parser";
+import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind } from "@/lib/sms-parser";
 import { formatMoney } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,7 @@ function accountLast4s(acc: AccountRow): Set<string> {
   const out = new Set<string>();
   if (!acc.detailInfo) return out;
   const norm = normalizeSmsText(acc.detailInfo);
-  for (const m of norm.matchAll(/[0-9][0-9\-*]{3,}/g)) {
+  for (const m of norm.matchAll(/[0-9][0-9.\-*]{3,}/g)) {
     const l4 = tokenLast4(m[0]);
     if (l4.length === 4) out.add(l4);
   }
@@ -78,7 +78,9 @@ export async function POST(req: Request) {
     let text = "";
     let bodyToken = "";
     let customDescription = "";
+    let bodyKindRaw: unknown = null;
     let dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
+    const queryKind = parseExplicitKind(new URL(req.url).searchParams.get("kind"));
     const ctype = (req.headers.get("content-type") || "").toLowerCase();
 
     if (ctype.includes("application/json")) {
@@ -86,6 +88,7 @@ export async function POST(req: Request) {
       text = String(body.text ?? "");
       bodyToken = String(body.token ?? "");
       customDescription = String(body.description ?? "");
+      bodyKindRaw = body.kind;
       dryRun = dryRun || Boolean(body.dryRun);
     } else if (ctype.includes("form")) {
       const form = await req.formData().catch(() => null);
@@ -100,6 +103,7 @@ export async function POST(req: Request) {
     }
 
     /* ---------- توکن ---------- */
+    const explicitKind = parseExplicitKind(bodyKindRaw) ?? queryKind;
     const token = intakeToken();
     if (token) {
       const provided =
@@ -147,9 +151,17 @@ export async function POST(req: Request) {
     /* ---------- تطبیق حساب بانکی ---------- */
     const accounts = await listAccounts();
     const assetAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
-    const smsLast4 = new Set(
-      [...parsed.cardTokens, ...parsed.fromSideTokens, ...parsed.toSideTokens].map(tokenLast4)
-    );
+    const smsTokens = [...parsed.cardTokens, ...parsed.fromSideTokens, ...parsed.toSideTokens];
+    const smsLast4 = new Set<string>();
+    for (const t of smsTokens) {
+      smsLast4.add(tokenLast4(t));
+      // حساب نقطه‌دار («292.8000.10195601.1»): اگر کاربر پسوند آخر را ذخیره نکرده باشد هم مچ شود
+      const stripped = t.replace(/\.\d+$/, "");
+      if (stripped !== t) {
+        const l4s = tokenLast4(stripped);
+        if (l4s.length === 4) smsLast4.add(l4s);
+      }
+    }
 
     let matched: AccountRow | null = null;
     let matchedVia = "";
@@ -191,6 +203,8 @@ export async function POST(req: Request) {
       if (inTo && !inFrom) kind = "deposit";
       else if (inFrom && !inTo) kind = "withdrawal";
     }
+    // نوع انتخاب‌شده توسط کاربر در شورتکات بر همه‌چیز (پارسر و حدس جهت) مقدم است
+    if (explicitKind) kind = explicitKind;
     if (kind === "unknown") {
       const message = "⚠️ مبلغ و حساب شناسایی شد اما نوع تراکنش (واریز/برداشت) از متن پیامک مشخص نیست.";
       return asText ? plain(message) : NextResponse.json({ ok: true, created: false, message });
