@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { separateThousands, parseAmount, amountToWords } from "@/lib/date-utils";
+import { separateThousands, parseAmount } from "@/lib/date-utils";
 import { blurOnEnter } from "@/lib/use-visual-viewport";
 
 interface Props {
@@ -10,7 +10,6 @@ interface Props {
   placeholder?: string;
   big?: boolean;
   autoFocus?: boolean;
-  showHint?: boolean;
   center?: boolean;
 }
 
@@ -23,10 +22,8 @@ export function AmountInput({
   placeholder = "۰",
   big = false,
   autoFocus = false,
-  showHint = true,
   center = false,
 }: Props) {
-  const raw = parseAmount(value);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = separateThousands(e.target.value);
@@ -65,12 +62,6 @@ export function AmountInput({
           </span>
         )}
       </div>
-
-      {showHint && raw > 0 && (
-        <div className="text-center text-[11px] font-semibold text-sky-600 mt-1">
-          {amountToWords(raw)}
-        </div>
-      )}
     </div>
   );
 }
