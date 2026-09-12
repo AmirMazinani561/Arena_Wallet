@@ -11,7 +11,12 @@ export default function Icon() {
   return new ImageResponse(<WalletMark />, { ...size });
 }
 
-export function WalletMark() {
+/**
+ * طرح کیف پول با ابعاد پایه ۵۱۲. پارامتر scale همه ابعاد ثابت را متناسب
+ * مقیاس می‌کند تا استفاده مجدد در کادرهای کوچک‌تر (مثل apple-icon ۱۸۰)
+ * باعث سرریز و بریده شدن طرح نشود. مقدار پیش‌فرض ۱ یعنی بدون تغییر.
+ */
+export function WalletMark({ scale = 1 }: { scale?: number }) {
   return (
     <div
       style={{
@@ -27,11 +32,11 @@ export function WalletMark() {
       <div
         style={{
           position: "relative",
-          width: 300,
-          height: 220,
-          borderRadius: 40,
+          width: 300 * scale,
+          height: 220 * scale,
+          borderRadius: 40 * scale,
           background: "rgba(255,255,255,0.96)",
-          boxShadow: "0 24px 60px rgba(3,105,161,0.45)",
+          boxShadow: `0 ${24 * scale}px ${60 * scale}px rgba(3,105,161,0.45)`,
           display: "flex",
         }}
       >
@@ -42,9 +47,9 @@ export function WalletMark() {
             top: 0,
             left: 0,
             right: 0,
-            height: 56,
-            borderTopLeftRadius: 40,
-            borderTopRightRadius: 40,
+            height: 56 * scale,
+            borderTopLeftRadius: 40 * scale,
+            borderTopRightRadius: 40 * scale,
             background: "#bae6fd",
           }}
         />
@@ -52,23 +57,23 @@ export function WalletMark() {
         <div
           style={{
             position: "absolute",
-            right: -28,
-            top: 88,
-            width: 120,
-            height: 82,
-            borderRadius: 26,
+            right: -28 * scale,
+            top: 88 * scale,
+            width: 120 * scale,
+            height: 82 * scale,
+            borderRadius: 26 * scale,
             background: "#0284c7",
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-start",
-            paddingLeft: 28,
+            paddingLeft: 28 * scale,
           }}
         >
           <div
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 17,
+              width: 34 * scale,
+              height: 34 * scale,
+              borderRadius: 17 * scale,
               background: "#e0f2fe",
             }}
           />

@@ -9,5 +9,6 @@ export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
 export default function AppleIcon() {
-  return new ImageResponse(<WalletMark />, { ...size });
+  // طرح پایه برای کادر ۵۱۲ است؛ بدون مقیاس، در کادر ۱۸۰ سرریز و بریده دیده می‌شود.
+  return new ImageResponse(<WalletMark scale={180 / 512} />, { ...size });
 }
