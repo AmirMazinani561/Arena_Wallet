@@ -14,6 +14,7 @@ import {
   PENDING_INCOME_CATEGORY_ID,
 } from "@/db/repo";
 import { toShamsiDateString, shamsiToGregorian } from "@/lib/date-utils";
+import { syncToEquity } from "@/lib/equity-sync";   // ← افزوده شد
 
 export const dynamic = "force-dynamic";
 
@@ -191,6 +192,21 @@ export async function POST(req: Request) {
       description: description ? String(description).trim() : null,
       trackingNumber: trackingNumber ? String(trackingNumber).trim() : null,
     });
+
+    // ↓↓↓ افزوده شد: همگام‌سازی با نرم‌افزار سرمایه ↓↓↓
+    // بدون await تا پاسخ به کاربر کند نشود. اگر هیچ طرفی حساب سرمایه
+    // نباشد، سمت مقابل خودش تراکنش را نادیده می‌گیرد.
+    void syncToEquity({
+      id: transaction.id,
+      amount: numAmount,
+      fromAccountId,
+      toAccountId,
+      fromAccountName: fromAcc.name,
+      toAccountName: toAcc.name,
+      shamsiDate: actualShamsi,
+      description: description ? String(description).trim() : null,
+    });
+    // ↑↑↑ پایان بخش افزوده‌شده ↑↑↑
 
     return NextResponse.json({ success: true, transaction });
   } catch (err: unknown) {
