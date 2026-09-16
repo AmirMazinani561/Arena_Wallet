@@ -14,12 +14,20 @@ import {
   BANK_FEE_CATEGORY_ID,
 } from "@/db/repo";
 import { sanitizeString } from "@/lib/validation";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type");
     const favoritesOnly = searchParams.get("favorite") === "true";
@@ -82,6 +90,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const body = await req.json();
     const {
       name,
@@ -158,6 +173,13 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const body = await req.json();
     const { id } = body;
 
@@ -224,6 +246,13 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 

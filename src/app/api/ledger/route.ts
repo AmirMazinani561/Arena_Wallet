@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { translateDbError } from "@/db/client";
 import { ensureDatabase, listAccounts, getLedger } from "@/db/repo";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,13 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
     const accountId = searchParams.get("accountId");
 
