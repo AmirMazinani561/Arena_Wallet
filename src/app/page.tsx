@@ -15,6 +15,7 @@ import { CreateAccountModal } from "@/components/CreateAccountModal";
 import { UnifiedSearchModal } from "@/components/UnifiedSearchModal";
 import { LoginModal } from "@/components/LoginModal";
 import { ActionSheet } from "@/components/ActionSheet";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Smartphone, Monitor, Plus, ListOrdered, Edit2, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 
 export default function App() {
@@ -322,60 +323,85 @@ export default function App() {
           ) : (
             <>
               {currentTab === "home" && (
-                <HomeTab
-                  accounts={accounts}
-                  transactions={transactions}
-                  pendingTxs={pendingTxs}
-                  onSelectPendingTx={handleOpenPendingTx}
-                  recentLimit={recentLimit}
-                  onChangeRecentLimit={handleChangeRecentLimit}
-                  onOpenNewTx={() => handleOpenNewTx()}
-                  onAccountAction={(acc) => setActionAccount(acc)}
-                  onSaveOrder={handleSaveOrder}
-                  onSelectTx={handleEditTx}
-                  onSwitchTab={(t) => setCurrentTab(t)}
-                />
+                <ErrorBoundary
+                  fallbackTitle="خطایی در نمایش صفحه اصلی رخ داد"
+                  onReset={() => loadData()}
+                >
+                  <HomeTab
+                    accounts={accounts}
+                    transactions={transactions}
+                    pendingTxs={pendingTxs}
+                    onSelectPendingTx={handleOpenPendingTx}
+                    recentLimit={recentLimit}
+                    onChangeRecentLimit={handleChangeRecentLimit}
+                    onOpenNewTx={() => handleOpenNewTx()}
+                    onAccountAction={(acc) => setActionAccount(acc)}
+                    onSaveOrder={handleSaveOrder}
+                    onSelectTx={handleEditTx}
+                    onSwitchTab={(t) => setCurrentTab(t)}
+                  />
+                </ErrorBoundary>
               )}
 
               {currentTab === "ledger" && ledgerAccountId && (
-                <LedgerView
-                  account={
-                    accounts.find((a) => a.id === ledgerAccountId) || {
-                      id: ledgerAccountId,
-                      name: "حساب",
-                      type: "bank",
-                      initialBalance: 0,
-                      isFavorite: false,
-                      isParent: false,
+                <ErrorBoundary
+                  fallbackTitle="خطایی در نمایش گردش حساب رخ داد"
+                  onReset={() => setRefreshKey((k) => k + 1)}
+                >
+                  <LedgerView
+                    account={
+                      accounts.find((a) => a.id === ledgerAccountId) || {
+                        id: ledgerAccountId,
+                        name: "حساب",
+                        type: "bank",
+                        initialBalance: 0,
+                        isFavorite: false,
+                        isParent: false,
+                      }
                     }
-                  }
-                  allAccounts={accounts}
-                  onBack={() => setCurrentTab("home")}
-                  onEditTx={handleEditTxById}
-                  reloadToken={refreshKey}
-                />
+                    allAccounts={accounts}
+                    onBack={() => setCurrentTab("home")}
+                    onEditTx={handleEditTxById}
+                    reloadToken={refreshKey}
+                  />
+                </ErrorBoundary>
               )}
 
               {currentTab === "reports" && (
-                <ReportsTab
-                  onFilterTransactionsByAccount={handleFilterTransactionsByAccount}
-                  refreshKey={refreshKey}
-                />
+                <ErrorBoundary
+                  fallbackTitle="خطایی در محاسبات گزارش‌ها رخ داد"
+                  onReset={() => setRefreshKey((k) => k + 1)}
+                >
+                  <ReportsTab
+                    onFilterTransactionsByAccount={handleFilterTransactionsByAccount}
+                    refreshKey={refreshKey}
+                  />
+                </ErrorBoundary>
               )}
 
               {currentTab === "accounts" && (
-                <AccountsTab
-                  accounts={accounts}
-                  onOpenCreateModal={handleOpenCreateAccount}
-                  onOpenEditModal={handleOpenEditAccount}
-                  onDeleteAccount={handleDeleteAccount}
-                  onToggleFavorite={handleToggleFavorite}
-                  onFilterTransactions={handleFilterTransactionsByAccount}
-                />
+                <ErrorBoundary
+                  fallbackTitle="خطایی در نمایش لیست حساب‌ها رخ داد"
+                  onReset={() => loadData()}
+                >
+                  <AccountsTab
+                    accounts={accounts}
+                    onOpenCreateModal={handleOpenCreateAccount}
+                    onOpenEditModal={handleOpenEditAccount}
+                    onDeleteAccount={handleDeleteAccount}
+                    onToggleFavorite={handleToggleFavorite}
+                    onFilterTransactions={handleFilterTransactionsByAccount}
+                  />
+                </ErrorBoundary>
               )}
 
               {currentTab === "settings" && (
-                <SettingsTab user={user} onLogout={handleLogout} onRefreshAllData={loadData} />
+                <ErrorBoundary
+                  fallbackTitle="خطایی در بخش تنظیمات رخ داد"
+                  onReset={() => loadData()}
+                >
+                  <SettingsTab user={user} onLogout={handleLogout} onRefreshAllData={loadData} />
+                </ErrorBoundary>
               )}
             </>
           )}
