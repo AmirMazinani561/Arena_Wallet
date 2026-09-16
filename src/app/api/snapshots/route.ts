@@ -9,13 +9,21 @@ import {
   AccountRow,
   TransactionRow,
 } from "@/db/repo";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 /** لیست اسنپ‌شات‌های خودکار و دستی */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const snapshots = await listSnapshots();
     return NextResponse.json({
       snapshots,
@@ -30,6 +38,13 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const body = await req.json().catch(() => ({}));
     const action = body.action || "create";
 

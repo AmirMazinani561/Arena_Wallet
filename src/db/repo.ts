@@ -921,10 +921,14 @@ export async function deleteTransaction(id: string): Promise<void> {
  * جستجوی تراکنش تکراری بر اساس هش متن پیامک (پنجره ۷ روزه).
  * از ثبت دوباره یک پیامک فورواردشده جلوگیری می‌کند.
  */
-export async function findRecentDuplicateByHash(hash: string): Promise<TransactionRow | null> {
+export async function findRecentDuplicateByHash(
+  hash: string | string[]
+): Promise<TransactionRow | null> {
+  const hashes = Array.isArray(hash) ? hash : [hash];
+  const marks = hashes.map(() => "?").join(", ");
   const rows = await query(
-    `SELECT * FROM transactions WHERE source_hash = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1`,
-    [hash, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)]
+    `SELECT * FROM transactions WHERE source_hash IN (${marks}) AND created_at > ? ORDER BY created_at DESC LIMIT 1`,
+    [...hashes, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)]
   );
   return rows.length ? mapTransaction(rows[0]) : null;
 }
