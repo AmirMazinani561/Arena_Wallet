@@ -11,29 +11,30 @@ import mysql from "mysql2/promise";
 
 export type Dialect = "postgres" | "mysql";
 
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error(
-    "DATABASE_URL تعریف نشده است. فایل .env را بسازید و آدرس اتصال دیتابیس را وارد نمایید."
-  );
+/** دریافت رشته اتصال دیتابیس به صورت Lazy هنگام اجرای کوئری */
+export function getDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url || !url.trim()) {
+    throw new Error(
+      "DATABASE_URL تعریف نشده است. لطفاً فایل .env را بسازید یا متغیر محیطی DATABASE_URL را تنظیم نمایید."
+    );
+  }
+  return url.trim();
 }
 
-export const dialect: Dialect =
-  databaseUrl.startsWith("mysql://") || databaseUrl.startsWith("mariadb://")
+/** تشخیص نوع پایگاه داده به صورت داینامیک */
+export function getDialect(): Dialect {
+  const url = process.env.DATABASE_URL || "";
+  return url.startsWith("mysql://") || url.startsWith("mariadb://")
     ? "mysql"
     : "postgres";
+}
 
-const isLocal =
-  databaseUrl.includes("localhost") ||
-  databaseUrl.includes("127.0.0.1") ||
-  databaseUrl.includes("::1");
-
-/**
- * هر دیتابیس غیرمحلی (Supabase، Neon، Railway و ...) اتصال امن را اجباری می‌کند.
- * با تنظیم DATABASE_SSL=false می‌توان این رفتار را غیرفعال کرد.
- */
-const needsSsl = !isLocal && process.env.DATABASE_SSL !== "false";
+/** مقدار پیش‌فرض دیالکت جهت سازگاری با ایمپورت‌های ثابت */
+export const dialect: Dialect =
+  (process.env.DATABASE_URL?.startsWith("mysql://") || process.env.DATABASE_URL?.startsWith("mariadb://"))
+    ? "mysql"
+    : "postgres";
 
 /**
  * تشخیص محیط سرورلس (Vercel).
@@ -51,6 +52,13 @@ const g = globalThis as GlobalPools;
 
 function getPgPool(): PgPool {
   if (!g.__walletPgPool) {
+    const databaseUrl = getDatabaseUrl();
+    const isLocal =
+      databaseUrl.includes("localhost") ||
+      databaseUrl.includes("127.0.0.1") ||
+      databaseUrl.includes("::1");
+    const needsSsl = !isLocal && process.env.DATABASE_SSL !== "false";
+
     g.__walletPgPool = new PgPool({
       connectionString: databaseUrl,
       ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
@@ -65,7 +73,13 @@ function getPgPool(): PgPool {
 
 function getMyPool(): mysql.Pool {
   if (!g.__walletMyPool) {
-    // هاست‌های اشتراکی معمولاً تعداد اتصال همزمان را محدود می‌کنند
+    const databaseUrl = getDatabaseUrl();
+    const isLocal =
+      databaseUrl.includes("localhost") ||
+      databaseUrl.includes("127.0.0.1") ||
+      databaseUrl.includes("::1");
+    const needsSsl = !isLocal && process.env.DATABASE_SSL !== "false";
+
     g.__walletMyPool = mysql.createPool({
       uri: databaseUrl,
       waitForConnections: true,
@@ -129,7 +143,8 @@ export async function query<T = Record<string, unknown>>(
   params: unknown[] = []
 ): Promise<T[]> {
   try {
-    if (dialect === "mysql") {
+    const activeDialect = getDialect();
+    if (activeDialect === "mysql") {
       const [rows] = await getMyPool().query(sqlText, params);
       return (Array.isArray(rows) ? rows : []) as T[];
     }
@@ -150,7 +165,7 @@ export async function execute(sqlText: string, params: unknown[] = []): Promise<
 
 /** تبدیل مقدار بولی به قالب قابل ذخیره در هر دو دیتابیس */
 export function boolParam(value: boolean): boolean | number {
-  return dialect === "mysql" ? (value ? 1 : 0) : value;
+  return getDialect() === "mysql" ? (value ? 1 : 0) : value;
 }
 
 /** خواندن مقدار بولی (MySQL عدد ۰/۱ و PostgreSQL مقدار boolean برمی‌گرداند) */
@@ -167,7 +182,7 @@ export function readNumber(value: unknown): number {
 
 /** تبدیل ستون به متن جهت جستجو (نحو در دو دیتابیس متفاوت است) */
 export function castToText(column: string): string {
-  return dialect === "mysql" ? `CAST(${column} AS CHAR)` : `CAST(${column} AS TEXT)`;
+  return getDialect() === "mysql" ? `CAST(${column} AS CHAR)` : `CAST(${column} AS TEXT)`;
 }
 
 /** بستن اتصال‌ها (برای اسکریپت‌های خط فرمان) */
