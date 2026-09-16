@@ -5,7 +5,7 @@
  * استفاده می‌کند که جداول را در صورت نبود، به صورت خودکار روی MySQL یا PostgreSQL می‌سازد.
  * بنابراین برای استقرار روی هاست نیازی به اجرای drizzle-kit نیست.
  */
-import { pgTable, varchar, text, timestamp, boolean, doublePrecision, index } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, timestamp, boolean, doublePrecision, integer, index } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 64 }).primaryKey(),
@@ -32,6 +32,7 @@ export const accounts = pgTable(
     detailInfo: text("detail_info"),
     icon: varchar("icon", { length: 64 }),
     color: varchar("color", { length: 32 }),
+    sortOrder: integer("sort_order").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -39,6 +40,7 @@ export const accounts = pgTable(
     index("idx_acc_type").on(t.type),
     index("idx_acc_parent").on(t.parentId),
     index("idx_acc_fav").on(t.isFavorite),
+    index("idx_acc_sort_order").on(t.sortOrder),
   ]
 );
 
@@ -57,14 +59,21 @@ export const transactions = pgTable(
     shamsiDate: varchar("shamsi_date", { length: 12 }).notNull(),
     description: text("description"),
     trackingNumber: varchar("tracking_number", { length: 120 }),
+    status: varchar("status", { length: 20 }).default("active").notNull(),
+    sourceHash: varchar("source_hash", { length: 64 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [
     index("idx_tx_shamsi_date").on(t.shamsiDate),
     index("idx_tx_date").on(t.date),
+    index("idx_tx_date_created").on(t.date, t.createdAt),
     index("idx_tx_from").on(t.fromAccountId),
     index("idx_tx_to").on(t.toAccountId),
     index("idx_tx_type").on(t.type),
+    index("idx_tx_status_date").on(t.status, t.date),
+    index("idx_tx_source_hash").on(t.sourceHash),
+    index("idx_tx_from_flow").on(t.fromAccountId, t.amount, t.fee),
+    index("idx_tx_to_flow").on(t.toAccountId, t.amount),
   ]
 );

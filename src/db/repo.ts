@@ -170,12 +170,18 @@ const DDL_POSTGRES = [
 const INDEXES: { name: string; table: string; columns: string }[] = [
   { name: "idx_tx_shamsi_date", table: "transactions", columns: "shamsi_date" },
   { name: "idx_tx_date", table: "transactions", columns: "date" },
+  { name: "idx_tx_date_created", table: "transactions", columns: "date, created_at" },
   { name: "idx_tx_from", table: "transactions", columns: "from_account_id" },
   { name: "idx_tx_to", table: "transactions", columns: "to_account_id" },
   { name: "idx_tx_type", table: "transactions", columns: "type" },
+  { name: "idx_tx_status_date", table: "transactions", columns: "status, date" },
+  { name: "idx_tx_source_hash", table: "transactions", columns: "source_hash" },
+  { name: "idx_tx_from_flow", table: "transactions", columns: "from_account_id, amount, fee" },
+  { name: "idx_tx_to_flow", table: "transactions", columns: "to_account_id, amount" },
   { name: "idx_acc_type", table: "accounts", columns: "type" },
   { name: "idx_acc_parent", table: "accounts", columns: "parent_id" },
   { name: "idx_acc_fav", table: "accounts", columns: "is_favorite" },
+  { name: "idx_acc_sort_order", table: "accounts", columns: "sort_order" },
 ];
 
 async function ensureIndexes() {
@@ -270,6 +276,7 @@ export function ensureDatabase(): Promise<void> {
         }
         // ستون‌های افزوده‌شده در نسخه‌های جدید (فقط ADD COLUMN — بدون تغییر داده)
         await ensureColumns();
+        await ensureIndexes();
         await ensureSystemCategories();
         bootstrapDone = true;
         return;
