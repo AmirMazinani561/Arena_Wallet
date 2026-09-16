@@ -185,6 +185,70 @@ export function castToText(column: string): string {
   return getDialect() === "mysql" ? `CAST(${column} AS CHAR)` : `CAST(${column} AS TEXT)`;
 }
 
+/** کلاینت اجرای دستورات درون یک تراکنش */
+export interface TransactionClient {
+  query: <T = Record<string, unknown>>(sqlText: string, params?: unknown[]) => Promise<T[]>;
+  execute: (sqlText: string, params?: unknown[]) => Promise<void>;
+}
+
+/**
+ * اجرای عملیات‌های چندمرحله‌ای در یک تراکنش اتمیک (ACID Transaction).
+ * در صورت بروز هرگونه خطا، تمام تغییرات خودکار Rollback شده و دیتابیس بدون تغییر باقی می‌ماند.
+ */
+export async function withTransaction<T>(
+  callback: (tx: TransactionClient) => Promise<T>
+): Promise<T> {
+  const activeDialect = getDialect();
+
+  if (activeDialect === "mysql") {
+    const conn = await getMyPool().getConnection();
+    try {
+      await conn.beginTransaction();
+      const txClient: TransactionClient = {
+        query: async <R = Record<string, unknown>>(sqlText: string, params: unknown[] = []) => {
+          const [rows] = await conn.query(sqlText, params);
+          return (Array.isArray(rows) ? rows : []) as R[];
+        },
+        execute: async (sqlText: string, params: unknown[] = []) => {
+          await conn.query(sqlText, params);
+        },
+      };
+      const result = await callback(txClient);
+      await conn.commit();
+      return result;
+    } catch (err) {
+      await conn.rollback().catch(() => {});
+      console.error("[DB Transaction Error]", err instanceof Error ? err.message : err);
+      throw err;
+    } finally {
+      conn.release();
+    }
+  } else {
+    const client = await getPgPool().connect();
+    try {
+      await client.query("BEGIN");
+      const txClient: TransactionClient = {
+        query: async <R = Record<string, unknown>>(sqlText: string, params: unknown[] = []) => {
+          const res = await client.query(toPgPlaceholders(sqlText), params);
+          return res.rows as R[];
+        },
+        execute: async (sqlText: string, params: unknown[] = []) => {
+          await client.query(toPgPlaceholders(sqlText), params);
+        },
+      };
+      const result = await callback(txClient);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("[DB Transaction Error]", err instanceof Error ? err.message : err);
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+}
+
 /** بستن اتصال‌ها (برای اسکریپت‌های خط فرمان) */
 export async function closePools(): Promise<void> {
   if (g.__walletPgPool) {

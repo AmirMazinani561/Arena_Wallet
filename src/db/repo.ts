@@ -1,6 +1,7 @@
 import {
   query,
   execute,
+  withTransaction,
   dialect,
   boolParam,
   readBool,
@@ -1292,45 +1293,48 @@ export async function replaceAll(
   txData: TransactionRow[]
 ): Promise<void> {
   invalidateAccountsCache();
-  await execute(`DELETE FROM transactions`);
-  await execute(`DELETE FROM accounts`);
 
-  for (const a of accountsData) {
-    await execute(
-      `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        a.id,
-        a.type,
-        a.name,
-        a.initialBalance,
-        boolParam(a.isFavorite),
-        boolParam(a.isParent),
-        a.parentId,
-        a.detailInfo,
-        a.icon || "wallet",
-        a.color || "#0284c7",
-        a.sortOrder || 0,
-      ]
-    );
-  }
+  await withTransaction(async (tx) => {
+    await tx.execute(`DELETE FROM transactions`);
+    await tx.execute(`DELETE FROM accounts`);
 
-  for (const t of txData) {
-    await execute(
-      `INSERT INTO transactions (id, type, amount, fee, from_account_id, to_account_id, date, shamsi_date, description, tracking_number)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        t.id,
-        t.type,
-        t.amount,
-        t.fee || 0,
-        t.fromAccountId,
-        t.toAccountId,
-        new Date(t.date),
-        t.shamsiDate,
-        t.description,
-        t.trackingNumber,
-      ]
-    );
-  }
+    for (const a of accountsData) {
+      await tx.execute(
+        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          a.id,
+          a.type,
+          a.name,
+          a.initialBalance,
+          boolParam(a.isFavorite),
+          boolParam(a.isParent),
+          a.parentId,
+          a.detailInfo,
+          a.icon || "wallet",
+          a.color || "#0284c7",
+          a.sortOrder || 0,
+        ]
+      );
+    }
+
+    for (const t of txData) {
+      await tx.execute(
+        `INSERT INTO transactions (id, type, amount, fee, from_account_id, to_account_id, date, shamsi_date, description, tracking_number)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          t.id,
+          t.type,
+          t.amount,
+          t.fee || 0,
+          t.fromAccountId,
+          t.toAccountId,
+          new Date(t.date),
+          t.shamsiDate,
+          t.description,
+          t.trackingNumber,
+        ]
+      );
+    }
+  });
 }
