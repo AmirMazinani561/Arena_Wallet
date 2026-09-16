@@ -173,11 +173,17 @@ export function readBool(value: unknown): boolean {
   return value === true || value === 1 || value === "1";
 }
 
-/** خواندن مقدار عددی (برخی درایورها عدد را به صورت رشته برمی‌گردانند) */
+/** گرد کردن دقیق مبالغ مالی جهت حذف کامل خطاهای ممیز شناور IEEE 754 */
+export function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/** خواندن مقدار عددی مالی به همراه نرمال‌سازی دقت */
 export function readNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
   const n = typeof value === "number" ? value : parseFloat(String(value));
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? roundMoney(n) : 0;
 }
 
 /** تبدیل ستون به متن جهت جستجو (نحو در دو دیتابیس متفاوت است) */

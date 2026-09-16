@@ -6,6 +6,7 @@ import {
   boolParam,
   readBool,
   readNumber,
+  roundMoney,
   castToText,
 } from "./client";
 import { hashPassword } from "@/lib/auth-utils";
@@ -593,7 +594,7 @@ export async function createAccount(data: {
       id,
       data.type,
       data.name,
-      data.initialBalance,
+      roundMoney(data.initialBalance || 0),
       boolParam(data.isFavorite),
       boolParam(data.isParent),
       data.parentId,
@@ -630,7 +631,7 @@ export async function updateAccount(
   }
   if (fields.initialBalance !== undefined) {
     sets.push("initial_balance = ?");
-    params.push(fields.initialBalance);
+    params.push(roundMoney(fields.initialBalance || 0));
   }
   if (fields.isFavorite !== undefined) {
     sets.push("is_favorite = ?");
@@ -845,8 +846,8 @@ export async function createTransaction(data: {
     [
       id,
       data.type,
-      data.amount,
-      data.fee,
+      roundMoney(data.amount || 0),
+      roundMoney(data.fee || 0),
       data.fromAccountId,
       data.toAccountId,
       data.date,
@@ -877,11 +878,16 @@ export async function updateTransaction(
   }
 ): Promise<void> {
   const sets = ["type = ?", "fee = ?", "from_account_id = ?", "to_account_id = ?"];
-  const params: unknown[] = [fields.type, fields.fee, fields.fromAccountId, fields.toAccountId];
+  const params: unknown[] = [
+    fields.type,
+    roundMoney(fields.fee || 0),
+    fields.fromAccountId,
+    fields.toAccountId,
+  ];
 
   if (fields.amount !== undefined) {
     sets.push("amount = ?");
-    params.push(fields.amount);
+    params.push(roundMoney(fields.amount || 0));
   }
   if (fields.date !== undefined && fields.shamsiDate !== undefined) {
     sets.push("date = ?", "shamsi_date = ?");
@@ -1117,6 +1123,7 @@ export async function getLedger(params: {
       // برای سرفصل‌ها مانده = گردش تجمعی
       running += tx.amount;
     }
+    running = roundMoney(running);
 
     const counterpartyId = isOut ? tx.toAccountId : tx.fromAccountId;
     const counterpartyName = String(isOut ? r.to_name || "" : r.from_name || "");
@@ -1139,15 +1146,15 @@ export async function getLedger(params: {
     });
   }
 
-  const closingBalance = running;
+  const closingBalance = roundMoney(running);
 
   // اعمال فیلترهای تاریخ و جستجو پس از محاسبه مانده (تا مانده صحیح بماند)
   let filtered = computed;
-  let openingBalance = isAsset ? initialBalance : 0;
+  let openingBalance = roundMoney(isAsset ? initialBalance : 0);
 
   if (startDate) {
     const before = computed.filter((x) => x.shamsiDate < startDate);
-    if (before.length > 0) openingBalance = before[before.length - 1].balanceAfter;
+    if (before.length > 0) openingBalance = roundMoney(before[before.length - 1].balanceAfter);
     filtered = filtered.filter((x) => x.shamsiDate >= startDate);
   }
   if (endDate) filtered = filtered.filter((x) => x.shamsiDate <= endDate);
