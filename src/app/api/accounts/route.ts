@@ -165,10 +165,15 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "شناسه حساب مشخص نشده است." }, { status: 400 });
     }
 
-    const cleanName = body.name !== undefined ? sanitizeString(body.name, 100) : undefined;
-    if (body.name !== undefined && !cleanName) {
-      return NextResponse.json({ error: "نام حساب نمی‌تواند خالی باشد." }, { status: 400 });
+    let cleanName: string | undefined;
+    if (body.name !== undefined) {
+      const sanitized = sanitizeString(body.name, 100);
+      if (!sanitized) {
+        return NextResponse.json({ error: "نام حساب نمی‌تواند خالی باشد." }, { status: 400 });
+      }
+      cleanName = sanitized;
     }
+
     const cleanDetail = body.detailInfo !== undefined ? sanitizeString(body.detailInfo, 250) : undefined;
     const numInitial = body.initialBalance !== undefined ? Number(body.initialBalance) : undefined;
     const validInitial = numInitial !== undefined && Number.isFinite(numInitial) ? numInitial : undefined;
@@ -176,8 +181,9 @@ export async function PUT(req: Request) {
     if (cleanName !== undefined || body.parentId !== undefined) {
       const current = await getAccount(String(id));
       if (current) {
-        const nextName = cleanName !== undefined ? cleanName : current.name;
-        const nextParent = body.parentId !== undefined ? body.parentId || null : current.parentId;
+        const nextName: string = cleanName !== undefined ? cleanName : current.name;
+        const nextParent: string | null =
+          body.parentId !== undefined ? body.parentId || null : current.parentId;
         const dup = await findDuplicateAccount({
           type: current.type,
           name: nextName,
