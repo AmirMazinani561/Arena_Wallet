@@ -1,15 +1,28 @@
 import { NextResponse } from "next/server";
 import { translateDbError } from "@/db/client";
-import { ensureDatabase, findUser, getFirstUser, updateUserPassword } from "@/db/repo";
+import { ensureDatabase, findUser, updateUserPassword } from "@/db/repo";
 import { hashPassword, verifyPassword } from "@/lib/auth-utils";
+import {
+  createSessionToken,
+  attachSessionCookie,
+  clearSessionCookie,
+  getSessionFromRequest,
+} from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await ensureDatabase();
-    const user = await getFirstUser();
-    if (!user) return NextResponse.json({ authenticated: false });
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json({ authenticated: false });
+    }
+
+    const user = await findUser(session.username);
+    if (!user || user.id !== session.userId) {
+      return NextResponse.json({ authenticated: false });
+    }
 
     return NextResponse.json({
       authenticated: true,
@@ -43,10 +56,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "رمز عبور اشتباه است." }, { status: 401 });
       }
 
-      return NextResponse.json({
+      const token = createSessionToken({ id: user.id, username: user.username });
+      const res = NextResponse.json({
         success: true,
         user: { id: user.id, username: user.username, fullName: user.fullName },
       });
+      attachSessionCookie(res, token);
+      return res;
+    }
+
+    if (action === "logout") {
+      const res = NextResponse.json({ success: true });
+      clearSessionCookie(res);
+      return res;
     }
 
     if (action === "changePassword") {

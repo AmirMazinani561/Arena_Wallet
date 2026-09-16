@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureDatabase, exportAll, replaceAll, AccountRow, TransactionRow } from "@/db/repo";
 import { dialect, translateDbError } from "@/db/client";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,16 @@ function sqlValue(v: unknown): string {
 export async function GET(req: Request) {
   try {
     await ensureDatabase();
+
+    // بررسی احراز هویت سشن جهت جلوگیری از دانلود عمومی دیتابیس
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً ابتدا وارد حساب کاربری شوید." },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const format = searchParams.get("format") || "json";
 
@@ -67,7 +78,7 @@ export async function GET(req: Request) {
               t.fee,
               t.fromAccountId,
               t.toAccountId,
-              new Date(t.date),
+              t.date,
               t.shamsiDate,
               t.description,
               t.trackingNumber,
@@ -118,6 +129,16 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await ensureDatabase();
+
+    // بررسی احراز هویت سشن جهت جلوگیری از بازنویسی غیرمجاز دیتابیس
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً ابتدا وارد حساب کاربری شوید." },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { accounts: incomingAccounts, transactions: incomingTxs } = body;
 
