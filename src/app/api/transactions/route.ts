@@ -15,6 +15,12 @@ import {
 } from "@/db/repo";
 import { toShamsiDateString, shamsiToGregorian } from "@/lib/date-utils";
 import { syncToEquity } from "@/lib/equity-sync";   // ← افزوده شد
+import {
+  sanitizeString,
+  validatePositiveMoney,
+  validateNonNegativeMoney,
+  isValidShamsiDateString,
+} from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -135,13 +141,18 @@ export async function POST(req: Request) {
     const { amount, fee, fromAccountId, toAccountId, shamsiDate, date, description, trackingNumber } =
       body;
 
-    const numAmount = Number(amount);
-    if (!numAmount || numAmount <= 0) {
-      return NextResponse.json(
-        { error: "مبلغ تراکنش باید عددی بزرگتر از صفر باشد." },
-        { status: 400 }
-      );
+    const validatedAmount = validatePositiveMoney(amount);
+    if (!validatedAmount.valid) {
+      return NextResponse.json({ error: validatedAmount.error }, { status: 400 });
     }
+    const numAmount = validatedAmount.value;
+
+    const validatedFee = validateNonNegativeMoney(fee);
+    if (!validatedFee.valid) {
+      return NextResponse.json({ error: validatedFee.error }, { status: 400 });
+    }
+    const numFee = validatedFee.value;
+
     if (!fromAccountId || !toAccountId) {
       return NextResponse.json({ error: "حساب مبدا و مقصد الزامی هستند." }, { status: 400 });
     }
@@ -165,21 +176,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: derived.error }, { status: 400 });
     }
 
-    const numFee = Math.max(0, Number(fee) || 0);
-
     let txDate: Date;
     let actualShamsi = shamsiDate ? String(shamsiDate).trim() : "";
 
-    if (actualShamsi && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(actualShamsi)) {
+    if (actualShamsi && isValidShamsiDateString(actualShamsi)) {
       txDate = shamsiToGregorian(actualShamsi);
       actualShamsi = toShamsiDateString(txDate);
     } else if (date) {
       txDate = new Date(date);
+      if (isNaN(txDate.getTime())) txDate = new Date();
       actualShamsi = toShamsiDateString(txDate);
     } else {
       txDate = new Date();
       actualShamsi = toShamsiDateString(txDate);
     }
+
+    const cleanDescription = sanitizeString(description, 500);
+    const cleanTracking = sanitizeString(trackingNumber, 100);
 
     const transaction = await createTransaction({
       type: derived.type,
@@ -189,8 +202,8 @@ export async function POST(req: Request) {
       toAccountId,
       date: txDate,
       shamsiDate: actualShamsi,
-      description: description ? String(description).trim() : null,
-      trackingNumber: trackingNumber ? String(trackingNumber).trim() : null,
+      description: cleanDescription,
+      trackingNumber: cleanTracking,
     });
 
     // ↓↓↓ افزوده شد: همگام‌سازی با نرم‌افزار سرمایه ↓↓↓
@@ -253,29 +266,45 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: derived.error }, { status: 400 });
     }
 
+    let validatedAmountValue: number | undefined;
+    if (amount !== undefined) {
+      const validatedAmount = validatePositiveMoney(amount);
+      if (!validatedAmount.valid) {
+        return NextResponse.json({ error: validatedAmount.error }, { status: 400 });
+      }
+      validatedAmountValue = validatedAmount.value;
+    }
+
     let dateValue: Date | undefined;
     let shamsiValue: string | undefined;
     if (shamsiDate) {
-      dateValue = shamsiToGregorian(String(shamsiDate).trim());
-      shamsiValue = toShamsiDateString(dateValue);
+      const rawShamsi = String(shamsiDate).trim();
+      if (isValidShamsiDateString(rawShamsi)) {
+        dateValue = shamsiToGregorian(rawShamsi);
+        shamsiValue = toShamsiDateString(dateValue);
+      }
     }
 
-    const nextFee =
-      fee === undefined || fee === null || fee === ""
-        ? existing.fee
-        : Math.max(0, Number(fee) || 0);
+    let nextFee: number = existing.fee;
+    if (fee !== undefined && fee !== null && fee !== "") {
+      const validatedFee = validateNonNegativeMoney(fee);
+      if (!validatedFee.valid) {
+        return NextResponse.json({ error: validatedFee.error }, { status: 400 });
+      }
+      nextFee = validatedFee.value;
+    }
 
     await updateTransaction(String(id), {
       type: derived.type,
-      amount: amount ? Number(amount) : undefined,
+      amount: validatedAmountValue,
       fee: nextFee,
       fromAccountId: finalFromId,
       toAccountId: finalToId,
       date: dateValue,
       shamsiDate: shamsiValue,
-      description: description !== undefined ? (description ? String(description).trim() : null) : undefined,
+      description: description !== undefined ? sanitizeString(description, 500) : undefined,
       trackingNumber:
-        trackingNumber !== undefined ? (trackingNumber ? String(trackingNumber).trim() : null) : undefined,
+        trackingNumber !== undefined ? sanitizeString(trackingNumber, 100) : undefined,
     });
 
     // ارتقای تراکنش‌های نیمه‌تمام (ثبت‌شده از پیامک):

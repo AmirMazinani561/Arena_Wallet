@@ -13,6 +13,7 @@ import {
   getAccount,
   BANK_FEE_CATEGORY_ID,
 } from "@/db/repo";
+import { sanitizeString } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,8 @@ export async function POST(req: Request) {
       icon,
     } = body;
 
-    if (!name || !String(name).trim()) {
+    const cleanName = sanitizeString(name, 100);
+    if (!cleanName) {
       return NextResponse.json({ error: "نام حساب الزامی است." }, { status: 400 });
     }
     if (!type || !["bank", "cash", "person", "income", "expense"].includes(type)) {
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
 
     const dup = await findDuplicateAccount({
       type,
-      name: String(name),
+      name: cleanName,
       parentId: parentId || null,
     });
     if (dup) {
@@ -117,14 +119,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const numInitial = Number(initialBalance);
+    const validInitial = Number.isFinite(numInitial) ? numInitial : 0;
+    const cleanDetail = sanitizeString(detailInfo, 250);
+
     const account = await createAccount({
       type,
-      name: String(name).trim(),
-      initialBalance: Number(initialBalance) || 0,
+      name: cleanName,
+      initialBalance: validInitial,
       isFavorite: Boolean(isFavorite),
       isParent: Boolean(isParent),
       parentId: parentId || null,
-      detailInfo: detailInfo ? String(detailInfo).trim() : null,
+      detailInfo: cleanDetail,
       icon:
         icon ||
         (type === "bank"
@@ -159,10 +165,18 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "شناسه حساب مشخص نشده است." }, { status: 400 });
     }
 
-    if (body.name !== undefined || body.parentId !== undefined) {
+    const cleanName = body.name !== undefined ? sanitizeString(body.name, 100) : undefined;
+    if (body.name !== undefined && !cleanName) {
+      return NextResponse.json({ error: "نام حساب نمی‌تواند خالی باشد." }, { status: 400 });
+    }
+    const cleanDetail = body.detailInfo !== undefined ? sanitizeString(body.detailInfo, 250) : undefined;
+    const numInitial = body.initialBalance !== undefined ? Number(body.initialBalance) : undefined;
+    const validInitial = numInitial !== undefined && Number.isFinite(numInitial) ? numInitial : undefined;
+
+    if (cleanName !== undefined || body.parentId !== undefined) {
       const current = await getAccount(String(id));
       if (current) {
-        const nextName = body.name !== undefined ? String(body.name) : current.name;
+        const nextName = cleanName !== undefined ? cleanName : current.name;
         const nextParent = body.parentId !== undefined ? body.parentId || null : current.parentId;
         const dup = await findDuplicateAccount({
           type: current.type,
@@ -184,15 +198,14 @@ export async function PUT(req: Request) {
     }
 
     await updateAccount(String(id), {
-      name: body.name !== undefined ? String(body.name).trim() : undefined,
-      initialBalance:
-        body.initialBalance !== undefined ? Number(body.initialBalance) : undefined,
+      name: cleanName,
+      initialBalance: validInitial,
       isFavorite: body.isFavorite !== undefined ? Boolean(body.isFavorite) : undefined,
       isParent: body.isParent !== undefined ? Boolean(body.isParent) : undefined,
       parentId: body.parentId !== undefined ? body.parentId || null : undefined,
-      detailInfo: body.detailInfo !== undefined ? body.detailInfo : undefined,
-      icon: body.icon !== undefined ? body.icon : undefined,
-      color: body.color !== undefined ? body.color : undefined,
+      detailInfo: cleanDetail,
+      icon: body.icon !== undefined ? (sanitizeString(body.icon, 50) || undefined) : undefined,
+      color: body.color !== undefined ? (sanitizeString(body.color, 30) || undefined) : undefined,
     });
 
     return NextResponse.json({ success: true, message: "حساب با موفقیت ویرایش شد." });
