@@ -6,5 +6,10 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
+  if (!password || !hash) return false;
+  const computed = hashPassword(password);
+  const bufA = Buffer.from(computed);
+  const bufB = Buffer.from(hash);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
 }
