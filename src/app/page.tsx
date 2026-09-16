@@ -53,15 +53,32 @@ export default function App() {
   useEffect(() => {
     const savedLimit = parseInt(localStorage.getItem("ios_wallet_recent_limit") || "10", 10);
     if ([5, 10, 15, 20, 30, 50].includes(savedLimit)) setRecentLimit(savedLimit);
-    const savedUser = localStorage.getItem("ios_wallet_user");
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        setIsLoggedIn(true);
-      } catch {
-        setIsLoggedIn(false);
-      }
-    }
+
+    // اعتبارسنجی سشن امن با سرور
+    fetch("/api/auth")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+          setIsLoggedIn(true);
+          localStorage.setItem("ios_wallet_user", JSON.stringify(data.user));
+        } else {
+          localStorage.removeItem("ios_wallet_user");
+          setUser(null);
+          setIsLoggedIn(false);
+        }
+      })
+      .catch(() => {
+        const savedUser = localStorage.getItem("ios_wallet_user");
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+            setIsLoggedIn(true);
+          } catch {
+            setIsLoggedIn(false);
+          }
+        }
+      });
   }, []);
 
   const loadData = useCallback(async () => {
@@ -98,7 +115,14 @@ export default function App() {
     localStorage.setItem("ios_wallet_user", JSON.stringify(loggedInUser));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } catch {}
     localStorage.removeItem("ios_wallet_user");
     setUser(null);
     setIsLoggedIn(false);
