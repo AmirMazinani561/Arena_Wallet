@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureDatabase, exportAll, replaceAll, AccountRow, TransactionRow } from "@/db/repo";
+import { ensureDatabase, exportAll, replaceAll, createSnapshot, AccountRow, TransactionRow } from "@/db/repo";
 import { dialect, translateDbError } from "@/db/client";
 import { getSessionFromRequest } from "@/lib/session";
 
@@ -36,15 +36,25 @@ export async function GET(req: Request) {
     /* ---------- خروجی SQL جهت بازیابی مستقیم در phpMyAdmin ---------- */
     if (format === "sql") {
       const lines: string[] = [];
-      lines.push(`-- پشتیبان کیف پول هوشمند`);
+      lines.push(`-- پشتیبان جامع کیف پول هوشمند`);
       lines.push(`-- تاریخ تولید: ${new Date().toISOString()}`);
       lines.push(`-- نوع پایگاه داده: ${dialect}`);
       lines.push(``);
+      if (dialect === "mysql") {
+        lines.push(`SET FOREIGN_KEY_CHECKS = 0;`);
+      }
       lines.push(`DELETE FROM transactions;`);
       lines.push(`DELETE FROM accounts;`);
       lines.push(``);
 
-      for (const a of data.accounts) {
+      // مرتب‌سازی حساب‌ها: حساب‌های اصلی/والد قبل از زیرمجموعه‌ها درج شوند
+      const sortedAccounts = [...data.accounts].sort((a, b) => {
+        if (!a.parentId && b.parentId) return -1;
+        if (a.parentId && !b.parentId) return 1;
+        return (a.sortOrder || 0) - (b.sortOrder || 0);
+      });
+
+      for (const a of sortedAccounts) {
         lines.push(
           `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order) VALUES (` +
             [
@@ -89,11 +99,264 @@ export async function GET(req: Request) {
         );
       }
 
+      if (dialect === "mysql") {
+        lines.push(``);
+        lines.push(`SET FOREIGN_KEY_CHECKS = 1;`);
+      }
+
       return new Response(lines.join("\n"), {
         status: 200,
         headers: {
           "Content-Type": "application/sql; charset=utf-8",
           "Content-Disposition": `attachment; filename="wallet_backup_${stamp}.sql"`,
+        },
+      });
+    }
+
+    /* ---------- خروجی CSV سازگار با اکسل (Excel UTF-8 BOM) ---------- */
+    if (format === "csv") {
+      const accountMap = new Map(data.accounts.map((a) => [a.id, a.name]));
+      const csvRows: string[] = [];
+
+      // هدر ستون‌ها
+      csvRows.push(
+        [
+          "ردیف",
+          "شناسه",
+          "تاریخ شمسی",
+          "نوع تراکنش",
+          "مبلغ (ریال)",
+          "کارمزد (ریال)",
+          "حساب مبدا",
+          "حساب مقصد",
+          "شماره پیگیری",
+          "توضیحات",
+        ]
+          .map((c) => `"${c.replace(/"/g, '""')}"`)
+          .join(",")
+      );
+
+      data.transactions.forEach((t, idx) => {
+        const typeLabel =
+          t.type === "expense" ? "هزینه" : t.type === "income" ? "درآمد" : "انتقال";
+        const fromName = accountMap.get(t.fromAccountId) || t.fromAccountId;
+        const toName = accountMap.get(t.toAccountId) || t.toAccountId;
+
+        csvRows.push(
+          [
+            String(idx + 1),
+            t.id,
+            t.shamsiDate || "",
+            typeLabel,
+            String(t.amount),
+            String(t.fee || 0),
+            fromName,
+            toName,
+            t.trackingNumber || "",
+            t.description || "",
+          ]
+            .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+            .join(",")
+        );
+      });
+
+      // \uFEFF برای نمایش بی‌نقص متون فارسی در نرم‌افزار اکسل
+      const csvContent = "\uFEFF" + csvRows.join("\r\n");
+      return new Response(csvContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="wallet_transactions_${stamp}.csv"`,
+        },
+      });
+    }
+
+    /* ---------- خروجی HTML چاپی / ذخیره به عنوان PDF ---------- */
+    if (format === "print" || format === "pdf") {
+      const accountMap = new Map(data.accounts.map((a) => [a.id, a]));
+      let totalExpense = 0;
+      let totalIncome = 0;
+
+      data.transactions.forEach((t) => {
+        if (t.type === "expense") totalExpense += Number(t.amount) || 0;
+        if (t.type === "income") totalIncome += Number(t.amount) || 0;
+      });
+
+      const formatNum = (n: number) => Number(n || 0).toLocaleString("fa-IR");
+
+      const html = `<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>صورت‌حساب جامع مالی - کیف پول آرنا</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
+      background: #ffffff;
+      color: #0f172a;
+      margin: 0;
+      padding: 16px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .title { font-size: 16px; font-weight: bold; color: #0369a1; margin: 0; }
+    .meta { font-size: 10px; color: #64748b; margin-top: 4px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .stat-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
+    .stat-val { font-size: 13px; font-weight: bold; }
+    .val-income { color: #16a34a; }
+    .val-expense { color: #dc2626; }
+    .val-neutral { color: #0284c7; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 600;
+      text-align: right;
+      padding: 6px 8px;
+      border: 1px solid #e2e8f0;
+    }
+    td {
+      padding: 5px 8px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .badge {
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 600;
+    }
+    .badge-income { background: #dcfce7; color: #15803d; }
+    .badge-expense { background: #fee2e2; color: #b91c1c; }
+    .badge-transfer { background: #e0f2fe; color: #0369a1; }
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .print-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      padding: 10px 18px;
+      background: #0284c7;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+    }
+    @media print {
+      body { padding: 0; }
+      .print-btn { display: none !important; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1 class="title">گزارش صورت‌حساب جامع - کیف پول آرنا</h1>
+      <div class="meta">تاریخ گزارش: ${stamp} | تعداد کل تراکنش‌ها: ${formatNum(data.transactions.length)} | تعداد حساب‌ها: ${formatNum(data.accounts.length)}</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">تعداد تراکنش‌ها</div>
+      <div class="stat-val val-neutral">${formatNum(data.transactions.length)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">مجموع درآمدها</div>
+      <div class="stat-val val-income">${formatNum(totalIncome)} ریال</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">مجموع هزینه‌ها</div>
+      <div class="stat-val val-expense">${formatNum(totalExpense)} ریال</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="text-center" style="width: 35px;">ردیف</th>
+        <th style="width: 75px;">تاریخ</th>
+        <th class="text-center" style="width: 55px;">نوع</th>
+        <th style="width: 100px;">مبلغ (ریال)</th>
+        <th style="width: 110px;">از حساب</th>
+        <th style="width: 110px;">به حساب</th>
+        <th>توضیحات / شماره پیگیری</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${data.transactions
+        .map((t, idx) => {
+          const typeClass =
+            t.type === "expense" ? "badge-expense" : t.type === "income" ? "badge-income" : "badge-transfer";
+          const typeLabel =
+            t.type === "expense" ? "هزینه" : t.type === "income" ? "درآمد" : "انتقال";
+          const fromAcc = accountMap.get(t.fromAccountId);
+          const toAcc = accountMap.get(t.toAccountId);
+          const details = [t.description, t.trackingNumber ? `پیگیری: ${t.trackingNumber}` : null]
+            .filter(Boolean)
+            .join(" — ");
+
+          return `<tr>
+            <td class="text-center">${formatNum(idx + 1)}</td>
+            <td>${t.shamsiDate || "-"}</td>
+            <td class="text-center"><span class="badge ${typeClass}">${typeLabel}</span></td>
+            <td style="font-weight: bold;">${formatNum(t.amount)}</td>
+            <td>${fromAcc ? fromAcc.name : t.fromAccountId}</td>
+            <td>${toAcc ? toAcc.name : t.toAccountId}</td>
+            <td>${details || "-"}</td>
+          </tr>`;
+        })
+        .join("")}
+    </tbody>
+  </table>
+
+  <button class="print-btn" onclick="window.print()">🖨️ چاپ / ذخیره به عنوان PDF</button>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      setTimeout(() => {
+        window.print();
+      }, 400);
+    });
+  </script>
+</body>
+</html>`;
+
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
         },
       });
     }
@@ -177,6 +440,9 @@ export async function POST(req: Request) {
       status: "active",
       sourceHash: null,
     }));
+
+    // پیش از بازگردانی، یک اسنپ‌شات خودکار از وضعیت موجود گرفته می‌شود تا هیچ داده‌ای تصادفاً از بین نرود
+    await createSnapshot("manual");
 
     await replaceAll(accountsData, txData);
 
