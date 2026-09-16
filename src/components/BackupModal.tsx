@@ -2,7 +2,7 @@
 
 import { useLockBodyScroll } from "@/lib/use-lock-body-scroll";
 import React, { useState } from "react";
-import { Download, Upload, X, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Download, Upload, X, ShieldAlert, CheckCircle2, FileSpreadsheet, Printer } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
@@ -17,16 +17,22 @@ export function BackupModal({ isOpen, onClose, onRestoreSuccess }: Props) {
 
   if (!isOpen) return null;
 
-  const handleDownloadBackup = async (format: "json" | "sql" = "json") => {
+  const handleDownloadBackup = async (format: "json" | "sql" | "csv" | "print" = "json") => {
+    if (format === "print") {
+      window.open("/api/backup?format=print", "_blank");
+      return;
+    }
     try {
       setLoading(true);
       const res = await fetch(`/api/backup?format=${format}`);
-      if (!res.ok) throw new Error("خطا در دریافت فایل پشتیبان");
+      if (!res.ok) throw new Error("خطا در دریافت فایل");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `wallet_backup_${new Date().toISOString().slice(0, 10)}.${format}`;
+      const ext = format === "csv" ? "csv" : format;
+      const prefix = format === "csv" ? "wallet_transactions" : "wallet_backup";
+      a.download = `${prefix}_${new Date().toISOString().slice(0, 10)}.${ext}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -36,6 +42,8 @@ export function BackupModal({ isOpen, onClose, onRestoreSuccess }: Props) {
         text:
           format === "sql"
             ? "فایل SQL دانلود شد. می‌توانید آن را در phpMyAdmin هاست اجرا کنید."
+            : format === "csv"
+            ? "فایل Excel (CSV) با کدگذاری استاندارد فارسی دانلود شد."
             : "فایل پشتیبان JSON با موفقیت دانلود شد.",
       });
     } catch (err: unknown) {
@@ -144,6 +152,24 @@ export function BackupModal({ isOpen, onClose, onRestoreSuccess }: Props) {
               >
                 <Download className="w-4 h-4" />
                 <span>فایل SQL</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadBackup("csv")}
+                disabled={loading}
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>فایل Excel (CSV)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadBackup("print")}
+                disabled={loading}
+                className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                <span>چاپ / PDF</span>
               </button>
             </div>
           </div>
