@@ -21,6 +21,7 @@ import {
   validateNonNegativeMoney,
   isValidShamsiDateString,
 } from "@/lib/validation";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,13 @@ export function deriveTxType(
 export async function GET(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
 
     const accountId = searchParams.get("accountId");
@@ -137,6 +145,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const body = await req.json();
     const { amount, fee, fromAccountId, toAccountId, shamsiDate, date, description, trackingNumber } =
       body;
@@ -231,6 +246,13 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const body = await req.json();
     const { id, amount, fee, fromAccountId, toAccountId, shamsiDate, description, trackingNumber } =
       body;
@@ -329,6 +351,13 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) {

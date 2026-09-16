@@ -6,12 +6,20 @@ import {
   getAccountFlows,
   getReportAggregates,
 } from "@/db/repo";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
     await ensureDatabase();
+    const session = getSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "دسترسی غیرمجاز. لطفاً وارد سیستم شوید." },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");

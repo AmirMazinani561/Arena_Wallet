@@ -91,6 +91,13 @@ export default function App() {
         fetch(`/api/transactions?limit=${recentLimit}&offset=0`),
         fetch("/api/transactions?limit=50&offset=0&status=pending"),
       ]);
+      if (accRes.status === 401 || txRes.status === 401) {
+        localStorage.removeItem("ios_wallet_user");
+        setUser(null);
+        setIsLoggedIn(false);
+        return;
+      }
+
       const accData = await accRes.json();
       const txData = await txRes.json();
       const pendingData = await pendingRes.json().catch(() => ({}));
