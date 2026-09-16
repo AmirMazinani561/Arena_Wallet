@@ -87,7 +87,10 @@ export async function POST(req: Request) {
       }
 
       await updateUserPassword(user.id, hashPassword(newPassword));
-      return NextResponse.json({ success: true, message: "رمز عبور با موفقیت به‌روزرسانی شد." });
+      const token = createSessionToken({ id: user.id, username: user.username });
+      const res = NextResponse.json({ success: true, message: "رمز عبور با موفقیت به‌روزرسانی شد." });
+      attachSessionCookie(res, token);
+      return res;
     }
 
     return NextResponse.json({ error: "عملیات نامعتبر است." }, { status: 400 });

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import { translateDbError } from "@/db/client";
 import { ensureDatabase, createSnapshot } from "@/db/repo";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,16 +13,35 @@ export const dynamic = "force-dynamic";
  * و یک اسنپ‌شات کامل از حساب‌ها و تراکنش‌ها در جدول backup_snapshots ذخیره می‌کند.
  *
  * امنیت: اگر متغیر CRON_SECRET تعریف شده باشد، فقط درخواست‌هایی با
- * هدر «Authorization: Bearer <CRON_SECRET>» پذیرفته می‌شوند.
- * (Vercel این هدر را به صورت خودکار برای Cron Jobs ارسال می‌کند.)
+ * هدر «Authorization: Bearer <CRON_SECRET>» با مقایسه زمان‌ثابت پذیرفته می‌شوند.
+ * در صورت عدم تنظیم متغیر، دسترسی فقط برای سشن معتبر ادمین مجاز خواهد بود تا از پر شدن دیتابیس توسط مهاجم ناشناس جلوگیری شود.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization") || "";
+
+  let authorized = false;
+
   if (secret) {
-    const auth = req.headers.get("authorization") || "";
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 401 });
+    const expected = `Bearer ${secret}`;
+    if (authHeader.length === expected.length) {
+      authorized = crypto.timingSafeEqual(
+        Buffer.from(authHeader),
+        Buffer.from(expected)
+      );
     }
+  } else {
+    const session = getSessionFromRequest(req);
+    if (session) {
+      authorized = true;
+    }
+  }
+
+  if (!authorized) {
+    return NextResponse.json(
+      { error: "دسترسی غیرمجاز. کلید امنیتی یا احراز هویت معتبر الزامی است." },
+      { status: 401 }
+    );
   }
 
   try {
