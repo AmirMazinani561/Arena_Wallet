@@ -13,6 +13,7 @@ import {
 } from "@/db/repo";
 import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind } from "@/lib/sms-parser";
 import { formatMoney } from "@/lib/date-utils";
+import { sanitizeString } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -135,8 +136,9 @@ export async function POST(req: Request) {
     }
 
     /* ---------- تشخیص تکراری (پنجره ۷ روزه) ---------- */
-    const hash = crypto.createHash("sha1").update(parsed.normalized).digest("hex");
-    const dup = await findRecentDuplicateByHash(hash);
+    const hashSha256 = crypto.createHash("sha256").update(parsed.normalized).digest("hex");
+    const hashSha1 = crypto.createHash("sha1").update(parsed.normalized).digest("hex");
+    const dup = await findRecentDuplicateByHash([hashSha256, hashSha1]);
     if (dup) {
       const payload = {
         ok: true,
@@ -279,10 +281,10 @@ export async function POST(req: Request) {
       toAccountId: toId,
       date: new Date(parsed.dateIso),
       shamsiDate: parsed.shamsiDate,
-      description: finalDescription,
-      trackingNumber: parsed.tracking,
+      description: sanitizeString(finalDescription, 500) || finalDescription,
+      trackingNumber: sanitizeString(parsed.tracking, 100),
       status,
-      sourceHash: hash,
+      sourceHash: hashSha256,
     });
 
     const kindLabel = kind === "deposit" ? "واریز" : kind === "fee" ? "کارمزد" : "برداشت";
