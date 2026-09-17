@@ -69,10 +69,11 @@ export function normalizeSmsText(raw: string): string {
   s = s.replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)));
   s = s.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
   s = s.replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/[ةۀ]/g, "ه");
-  s = s.replace(/[−–—]/g, "-");
+  s = s.replace(/[\u2212\u2010-\u2015\u207b\u208b\ufe58\ufe63\uff0d−–—]/g, "-");
+  s = s.replace(/[\u207a\u208a\ufe62\uff0b]/g, "+");
   s = s.replace(/٬/g, ",");
   s = s.replace(/[،؛]/g, ";");
-  s = s.replace(/\u00a0/g, " ");
+  s = s.replace(/[\u00a0\u2009\u200a\u202f]/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   return s;
 }
@@ -91,6 +92,7 @@ const DEPOSIT_HINTS: [RegExp, number][] = [
   [/واریز/g, 3],
   [/نشست/g, 3],
   [/وصول/g, 3],
+  [/انتقال\s*:\s*[\d,]+\s*\+/g, 3],
   [/انتقال\s+از/g, 2],
   [/به\s+حساب\s+شما/g, 2],
   [/دریافت/g, 1],
@@ -102,6 +104,8 @@ const WITHDRAW_HINTS: [RegExp, number][] = [
   [/برداشت/g, 3],
   [/پرید/g, 3],
   [/خرید/g, 3],
+  [/انتقال\s*\+\s*کارمزد/g, 4],
+  [/انتقال\s*:\s*[\d,]+\s*\-/g, 3],
   [/پرداخت/g, 2],
   [/انتقال\s+(?:وجه\s+)?به/g, 2],
   [/خودپرداز/g, 1],
@@ -215,30 +219,46 @@ export function parseBankSms(raw: string): ParsedSms {
   };
 
   /* ---------- ۱) مبلغ / کارمزد / مانده ---------- */
-  // گروه اول: علامت اختیاری قبل از مبلغ («مبلغ:-4,500,000» یعنی برداشت)
-  const mAmount = normalized.match(/مبلغ\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/);
-  const mFee = normalized.match(/کارمزد\s*[:;()\-]*\s*([\d,]{3,})/);
+  // پشتیبانی از انواع پیشوندهای متداول بانکی (مبلغ، انتقال، انتقال+کارمزد، واریز، برداشت، خرید)
+  // علامت قبل یا بعد از عدد با یا بدون فاصله استخراج می‌شود
+  const mAmount = normalized.match(
+    /(?:مبلغ|انتقال(?:\s*\+\s*کارمزد)?|واریز|برداشت|خرید)\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})\s*([+\-])?/
+  );
+
+  // کارمزد مستقل: فقط در صورتی که بخشی از برچسب «انتقال+کارمزد» نباشد
+  let mFee: RegExpMatchArray | null = null;
+  const feeMatch = normalized.match(/(?:^|[^\p{L}])کارمزد\s*[:;()\-]*\s*([\d,]{3,})/u);
+  if (feeMatch) {
+    const idx = feeMatch.index ?? 0;
+    const before = normalized.slice(Math.max(0, idx - 10), idx);
+    if (!/انتقال\s*\+?/.test(before)) {
+      mFee = feeMatch;
+    }
+  }
+
   const mBalance = normalized.match(/(?:مانده|موجودی)[^;\d]*([\d,]{3,})/);
   mark(mAmount);
-  mark(mFee);
+  if (mFee) mark(mFee);
   mark(mBalance);
 
   const labeledAmount = mAmount ? toNumber(mAmount[2]) : 0;
 
-  // علامت کنار مبلغ: اول قبل از عدد، وگرنه بلافاصله بعد از عدد —
-  // «+» تقریباً همیشه علامت واریز است («80,000,000+ریال» با یا بدون فاصله)؛
-  // «−» هم علامت برداشت است («200,000-») و فقط وقتی رد می‌شود که به کلمه یا رقم بچسبد («750,000-تاریخ»)
+  // علامت کنار مبلغ: اول قبل از عدد، وگرنه بعد از عدد —
+  // «+» علامت قطعی واریز و «−» علامت قطعی برداشت است
   let amountSign: "+" | "-" | null = null;
   if (mAmount) {
     if (mAmount[1] === "+" || mAmount[1] === "-") {
       amountSign = mAmount[1];
+    } else if (mAmount[3] === "+" || mAmount[3] === "-") {
+      amountSign = mAmount[3];
     } else if (mAmount.index !== undefined) {
       const after = normalized.slice(mAmount.index + mAmount[0].length);
-      const tm = after.match(/^([+\-])/);
+      const tm = after.match(/^\s*([+\-])/);
       if (tm) {
         const s = tm[1] as "+" | "-";
-        const nx = after.length > 1 ? after[1] : "";
-        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(after.slice(1, 8)) || !/[\p{L}0-9]/u.test(nx)) {
+        const trimmedAfter = after.trimStart();
+        const nx = trimmedAfter.length > 1 ? trimmedAfter[1] : "";
+        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(trimmedAfter.slice(1, 8)) || !/[\p{L}0-9]/u.test(nx)) {
           amountSign = s;
         }
       }
@@ -445,22 +465,23 @@ export function parseBankSms(raw: string): ParsedSms {
       const beforeWord = normalized.slice(Math.max(0, start - 10), start);
       if (/پیگیری|مرجع|ارجاع|سند/.test(beforeWord)) continue;
       const pure = m[0].replace(/,/g, "");
-      if (pure.length > 11) continue; // احتمالاً شماره پیگیری/مرجع
+      if (pure.length > 15) continue; // شماره کارت ۱۶ رقمی رد می‌شود، اما مبالغ بالای ۱۰ رقم (ریال) پذیرفته می‌شوند
       const v = toNumber(m[0]);
       if (v <= best) continue;
       best = v;
       bestSign = null;
-      // علامت چسبیده قبل از عدد — به شرطی که خودش دنباله ارقام نباشد (مثل تکه شماره کارت)
+      // علامت قبل یا بعد از عدد (با یا بدون فاصله)
+      const afterSlice = normalized.slice(range.end, range.end + 8);
+      const signMatch = afterSlice.match(/^\s*([+\-])/);
       if ((chBefore === "+" || chBefore === "-") && !/[0-9]/.test(chBefore2)) {
         bestSign = chBefore;
-      } else if (chAfter === "+") {
-        // «+» بعد از عدد علامت واریز است، حتی چسبیده به ریال («80,000,000+ریال»)
-        if (!/[0-9]/.test(chAfter2)) bestSign = "+";
-      } else if (chAfter === "-") {
-        // «−» بعد از عدد علامت برداشت است («200,000-» حتی چسبیده به ریال)؛
-        // فقط وقتی رد می‌شود که به رقم یا کلمه غیرپولی بچسبد («750,000-تاریخ»)
-        const afterWord = normalized.slice(range.end + 1, range.end + 8);
-        if (chAfter2 === "" || /^(?:ریال|ريال|تومان|تومن)/.test(afterWord) || !/[\p{L}0-9]/u.test(chAfter2)) bestSign = "-";
+      } else if (signMatch) {
+        const s = signMatch[1] as "+" | "-";
+        const trimmed = afterSlice.trimStart();
+        const nx = trimmed.length > 1 ? trimmed[1] : "";
+        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(trimmed.slice(1)) || !/[\p{L}0-9]/u.test(nx)) {
+          bestSign = s;
+        }
       }
     }
     amount = best;
@@ -482,6 +503,8 @@ export function parseBankSms(raw: string): ParsedSms {
       .slice(Math.min(karbarizIdx, amountIdx), Math.max(karbarizIdx, amountIdx))
       .includes(";");
 
+  const isTransferWithFee = mAmount && /انتقال\s*\+\s*کارمزد/.test(mAmount[0]);
+
   let kind: SmsKind = "unknown";
   let fee = 0;
 
@@ -493,8 +516,8 @@ export function parseBankSms(raw: string): ParsedSms {
     // فقط کارمزد برچسب‌خورده → پیامک کارمزد
     kind = "fee";
     amount = labeledFee;
-  } else if (labeledAmount && sameClause) {
-    // «کارمزد … مبلغ …» در یک جمله → پیامک کارمزد
+  } else if (labeledAmount && sameClause && !isTransferWithFee) {
+    // «کارمزد … مبلغ …» در یک جمله (مگر اینکه پیشوند انتقال+کارمزد باشد) → پیامک کارمزد
     kind = "fee";
   } else {
     fee = labeledFee;
