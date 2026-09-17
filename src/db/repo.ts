@@ -665,6 +665,7 @@ export async function updateAccount(
   id: string,
   fields: Partial<{
     name: string;
+    type: string;
     initialBalance: number;
     isFavorite: boolean;
     isParent: boolean;
@@ -680,6 +681,10 @@ export async function updateAccount(
   if (fields.name !== undefined) {
     sets.push("name = ?");
     params.push(fields.name);
+  }
+  if (fields.type !== undefined) {
+    sets.push("type = ?");
+    params.push(fields.type);
   }
   if (fields.initialBalance !== undefined) {
     sets.push("initial_balance = ?");

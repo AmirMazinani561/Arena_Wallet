@@ -196,18 +196,21 @@ export async function PUT(req: Request) {
       cleanName = sanitized;
     }
 
+    const validTypes = ["bank", "cash", "person", "income", "expense"];
+    const cleanType = body.type && validTypes.includes(body.type) ? body.type : undefined;
     const cleanDetail = body.detailInfo !== undefined ? sanitizeString(body.detailInfo, 250) : undefined;
     const numInitial = body.initialBalance !== undefined ? Number(body.initialBalance) : undefined;
     const validInitial = numInitial !== undefined && Number.isFinite(numInitial) ? numInitial : undefined;
 
-    if (cleanName !== undefined || body.parentId !== undefined) {
+    if (cleanName !== undefined || cleanType !== undefined || body.parentId !== undefined) {
       const current = await getAccount(String(id));
       if (current) {
+        const nextType = cleanType !== undefined ? cleanType : current.type;
         const nextName: string = cleanName !== undefined ? cleanName : current.name;
         const nextParent: string | null =
           body.parentId !== undefined ? body.parentId || null : current.parentId;
         const dup = await findDuplicateAccount({
-          type: current.type,
+          type: nextType,
           name: nextName,
           parentId: nextParent,
           excludeId: current.id,
@@ -227,6 +230,7 @@ export async function PUT(req: Request) {
 
     await updateAccount(String(id), {
       name: cleanName,
+      type: cleanType,
       initialBalance: validInitial,
       isFavorite: body.isFavorite !== undefined ? Boolean(body.isFavorite) : undefined,
       isParent: body.isParent !== undefined ? Boolean(body.isParent) : undefined,

@@ -431,6 +431,21 @@ export async function POST(req: Request) {
                 bestAccScore = s;
                 bestAccReason = r;
               }
+            } else if (pure.length > userAcc.length && pure.includes(userAcc) && userAcc.length >= 8) {
+              // انطباق هسته حساب بانکی در پیامک (مانند پیامک تجارت: 0129924144595 شامل 2992414459)
+              let s = 260;
+              let r = `انطباق شماره حساب در پیامک (${userAcc})`;
+              if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
+                s += 20;
+                r = `انطباق شماره حساب مبدأ در پیامک (${userAcc})`;
+              } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
+                s += 20;
+                r = `انطباق شماره حساب مقصد در پیامک (${userAcc})`;
+              }
+              if (s > bestAccScore) {
+                bestAccScore = s;
+                bestAccReason = r;
+              }
             }
           }
         }
@@ -472,9 +487,27 @@ export async function POST(req: Request) {
       }
 
       // =========================================================================
-      // سطح ۳: فالبک ۴ رقم آخر کارت/حساب (صرفاً در نبود انطباق کامل)
+      // بررسی قانون ضد تناقض (Anti-Conflict Rule):
+      // اگر در پیامک توکن حسابی با طول >= 5 رقم وجود دارد (مثل 81009)
+      // و حساب کاربر دارای شماره حسابی با ۴ رقم مشابه (1009) ولی رقم پنجم متناقض است (مثل 11009)،
+      // نباید فالبک ۴ رقمی یا الگوهای ۴ رقمی به این حساب داده شود.
       // =========================================================================
-      if (score < 180) {
+      const hasConflictingAccount = parsed.accountTokens.some((tok) => {
+        const pure = tok.pureDigits;
+        if (!pure || pure.length < 5) return false;
+        return cred.fullAccounts.some((userAcc) => {
+          if (userAcc.length < 5) return false;
+          const minLen = Math.min(pure.length, userAcc.length);
+          const tokSuffix = pure.slice(-minLen);
+          const accSuffix = userAcc.slice(-minLen);
+          return pure.slice(-4) === userAcc.slice(-4) && tokSuffix !== accSuffix;
+        });
+      });
+
+      // =========================================================================
+      // سطح ۳: فالبک ۴ رقم آخر کارت/حساب (صرفاً در نبود انطباق کامل و نبود تناقض)
+      // =========================================================================
+      if (score < 180 && !hasConflictingAccount) {
         for (const l4 of cred.last4s) {
           if (likelyWithdrawal) {
             if (fromLast4.has(l4) || generalLast4.has(l4)) {
@@ -513,7 +546,7 @@ export async function POST(req: Request) {
       let bestPatScore = 0;
       for (const pat of accPatterns) {
         let pScore = 0;
-        if (pat.cardLast4) {
+        if (pat.cardLast4 && !hasConflictingAccount) {
           if (likelyWithdrawal && (fromLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
             pScore += 110;
           } else if (likelyDeposit && (toLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
