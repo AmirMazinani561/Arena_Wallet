@@ -216,8 +216,9 @@ export function parseBankSms(raw: string): ParsedSms {
 
   /* ---------- ۱) مبلغ / کارمزد / مانده ---------- */
   // پشتیبانی از انواع پیشوندهای متداول بانکی (مبلغ، انتقال، انتقال+کارمزد، واریز، برداشت، خرید)
+  // علامت قبل یا بعد از عدد با یا بدون فاصله استخراج می‌شود
   const mAmount = normalized.match(
-    /(?:مبلغ|انتقال(?:\s*\+\s*کارمزد)?|واریز|برداشت|خرید)\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/
+    /(?:مبلغ|انتقال(?:\s*\+\s*کارمزد)?|واریز|برداشت|خرید)\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})\s*([+\-])?/
   );
 
   // کارمزد مستقل: فقط در صورتی که بخشی از برچسب «انتقال+کارمزد» نباشد
@@ -238,20 +239,22 @@ export function parseBankSms(raw: string): ParsedSms {
 
   const labeledAmount = mAmount ? toNumber(mAmount[2]) : 0;
 
-  // علامت کنار مبلغ: اول قبل از عدد، وگرنه بلافاصله بعد از عدد —
-  // «+» تقریباً همیشه علامت واریز است («80,000,000+ریال» با یا بدون فاصله)؛
-  // «−» هم علامت برداشت است («200,000-») و فقط وقتی رد می‌شود که به کلمه یا رقم بچسبد («750,000-تاریخ»)
+  // علامت کنار مبلغ: اول قبل از عدد، وگرنه بعد از عدد —
+  // «+» علامت قطعی واریز و «−» علامت قطعی برداشت است
   let amountSign: "+" | "-" | null = null;
   if (mAmount) {
     if (mAmount[1] === "+" || mAmount[1] === "-") {
       amountSign = mAmount[1];
+    } else if (mAmount[3] === "+" || mAmount[3] === "-") {
+      amountSign = mAmount[3];
     } else if (mAmount.index !== undefined) {
       const after = normalized.slice(mAmount.index + mAmount[0].length);
-      const tm = after.match(/^([+\-])/);
+      const tm = after.match(/^\s*([+\-])/);
       if (tm) {
         const s = tm[1] as "+" | "-";
-        const nx = after.length > 1 ? after[1] : "";
-        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(after.slice(1, 8)) || !/[\p{L}0-9]/u.test(nx)) {
+        const trimmedAfter = after.trimStart();
+        const nx = trimmedAfter.length > 1 ? trimmedAfter[1] : "";
+        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(trimmedAfter.slice(1, 8)) || !/[\p{L}0-9]/u.test(nx)) {
           amountSign = s;
         }
       }
@@ -463,17 +466,18 @@ export function parseBankSms(raw: string): ParsedSms {
       if (v <= best) continue;
       best = v;
       bestSign = null;
-      // علامت چسبیده قبل از عدد — به شرطی که خودش دنباله ارقام نباشد (مثل تکه شماره کارت)
+      // علامت قبل یا بعد از عدد (با یا بدون فاصله)
+      const afterSlice = normalized.slice(range.end, range.end + 8);
+      const signMatch = afterSlice.match(/^\s*([+\-])/);
       if ((chBefore === "+" || chBefore === "-") && !/[0-9]/.test(chBefore2)) {
         bestSign = chBefore;
-      } else if (chAfter === "+") {
-        // «+» بعد از عدد علامت واریز است، حتی چسبیده به ریال («80,000,000+ریال»)
-        if (!/[0-9]/.test(chAfter2)) bestSign = "+";
-      } else if (chAfter === "-") {
-        // «−» بعد از عدد علامت برداشت است («200,000-» حتی چسبیده به ریال)؛
-        // فقط وقتی رد می‌شود که به رقم یا کلمه غیرپولی بچسبد («750,000-تاریخ»)
-        const afterWord = normalized.slice(range.end + 1, range.end + 8);
-        if (chAfter2 === "" || /^(?:ریال|ريال|تومان|تومن)/.test(afterWord) || !/[\p{L}0-9]/u.test(chAfter2)) bestSign = "-";
+      } else if (signMatch) {
+        const s = signMatch[1] as "+" | "-";
+        const trimmed = afterSlice.trimStart();
+        const nx = trimmed.length > 1 ? trimmed[1] : "";
+        if (s === "+" ? !/[0-9]/.test(nx) : nx === "" || /^(?:ریال|ريال|تومان|تومن)/.test(trimmed.slice(1)) || !/[\p{L}0-9]/u.test(nx)) {
+          bestSign = s;
+        }
       }
     }
     amount = best;

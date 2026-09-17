@@ -242,10 +242,26 @@ export async function POST(req: Request) {
     }
 
     /* ---------- جهت تراکنش ----------
-     * ترتیب اولویت: نوع صریح شورتکات > الگوی آموزش‌داده‌شده > توکن‌های سمت > پارسر پیامک > هوش کلیدواژه‌ای
+     * ۱) علامت صریح ریاضی کنار مبلغ (+ واریز، - برداشت) — قوی‌ترین و قطعی‌ترین معیار
+     * ۲) نوع تعیین‌شده توسط پارسر پیامک (بر اساس کلیدواژه‌های اختصاصی بانکی و کارمزد)
+     * ۳) جهت انتقال بر اساس توکن‌های «به» و «از» شماره حساب/کارت
+     * ۴) نوع صریح ارسال‌شده از کلاینت (در صورت نبود علامت متضاد در متن)
+     * ۵) الگوی آموزش‌داده‌شده (در صورتی که پیامک علامت و نوع صریح نداشته باشد)
+     * ۶) هوش کلیدواژه‌ای متن
      */
-    let kind = patternMatchedKind || parsed.kind;
-    if (!patternMatchedKind && kind !== "fee") {
+    let kind: SmsKind = "unknown";
+
+    if (parsed.amountSign === "+") {
+      kind = "deposit";
+    } else if (parsed.amountSign === "-") {
+      kind = "withdrawal";
+    } else if (parsed.kind === "fee") {
+      kind = "fee";
+    } else if (parsed.kind === "deposit" || parsed.kind === "withdrawal") {
+      kind = parsed.kind;
+    }
+
+    if (kind === "unknown" && matched) {
       const matchedLast4 = [...accountLast4s(matched)];
       const inFrom = parsed.fromSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
       const inTo = parsed.toSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
@@ -253,13 +269,17 @@ export async function POST(req: Request) {
       else if (inFrom && !inTo) kind = "withdrawal";
     }
 
-    if (explicitKind) kind = explicitKind;
+    if (kind === "unknown" && explicitKind) {
+      kind = explicitKind;
+    }
+
+    if (kind === "unknown" && patternMatchedKind) {
+      kind = patternMatchedKind;
+    }
 
     if (kind === "unknown") {
-      if (parsed.amountSign === "+") kind = "deposit";
-      else if (parsed.amountSign === "-") kind = "withdrawal";
-      else if (/(?:واریز|افزایش|بستانکار|سود|حقوق)/.test(rawText)) kind = "deposit";
-      else if (/(?:برداشت|کاهش|بدهکار|خرید|پایا|ساتنا|انتقال|کارمزد)/.test(rawText)) kind = "withdrawal";
+      if (/(?:واریز|افزایش|بستانکار|سود|حقوق|نشست|وصول)/.test(rawText)) kind = "deposit";
+      else if (/(?:برداشت|کاهش|بدهکار|خرید|پایا|ساتنا|کارمزد|پرید)/.test(rawText)) kind = "withdrawal";
       else kind = "withdrawal";
     }
 
