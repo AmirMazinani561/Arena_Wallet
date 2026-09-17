@@ -1461,8 +1461,7 @@ export async function createSmsPattern(data: {
   };
 }
 
-export async function deleteSmsPattern(id: string): Promise<boolean> {
-  const res = await execute(`DELETE FROM sms_patterns WHERE id = ?`, [id]);
-  return res.affectedRows > 0;
+export async function deleteSmsPattern(id: string): Promise<void> {
+  await execute(`DELETE FROM sms_patterns WHERE id = ?`, [id]);
 }
 

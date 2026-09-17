@@ -157,11 +157,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "شناسه الگو مشخص نشده است." }, { status: 400 });
     }
 
-    const deleted = await deleteSmsPattern(String(id));
-    if (!deleted) {
-      return NextResponse.json({ error: "الگوی مورد نظر یافت نشد یا قبلاً حذف شده است." }, { status: 404 });
-    }
-
+    await deleteSmsPattern(String(id));
     return NextResponse.json({ success: true, message: "الگو با موفقیت حذف شد." });
   } catch (err: unknown) {
     return NextResponse.json({ error: translateDbError(err) }, { status: 500 });
