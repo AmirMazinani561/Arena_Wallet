@@ -13,13 +13,15 @@ import { sanitizeString } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
-/** استخراج ۴ رقم آخر از توکن یا رشته */
+/** استخراج ۴ رقم آخر از توکن‌های معتبر کارت یا حساب */
 function extractCardLast4(text: string, parsedTokens: string[]): string | null {
   for (const t of parsedTokens) {
     const digits = t.replace(/\D/g, "");
     if (digits.length >= 4) return digits.slice(-4);
   }
-  const match = text.match(/(?:کارت|حساب|شماره)?\s*[:;\-]*\s*(?:\*{2,4}|x{2,4})?(\d{4})\b/i);
+  const match =
+    text.match(/(?:کارت|حساب|شبا)\s*[:;\-]*\s*(?:\*{2,4}|[xX]{2,4})?(\d{4})\b/i) ||
+    text.match(/(?:\*{2,4}|[xX]{2,4})[-*.\s]*(\d{4})\b/);
   if (match) return match[1];
   return null;
 }
@@ -35,7 +37,12 @@ function extractKeywords(text: string): string[] {
   const stopWords = new Set([
     "ریال", "تومان", "ساعت", "تاریخ", "مانده", "موجودی", "مبلغ", "کارت",
     "حساب", "شماره", "بانک", "به", "از", "در", "با", "و", "شد", "است",
-    "اینترنت", "همراه", "پیگیری", "مرجع", "شناسه", "رسید"
+    "اینترنت", "همراه", "پیگیری", "مرجع", "شناسه", "رسید",
+    // واژگان عمومی تراکنش که در همه بانک‌ها تکرار می‌شوند و نباید کلیدواژه اختصاصی باشند:
+    "واریز", "برداشت", "خرید", "انتقال", "پایا", "ساتنا", "کارمزد", "شاپرک", "شتاب",
+    "پایانه", "موفق", "ناموفق", "شعبه", "خودپرداز", "pos", "pos+", "pos-",
+    "طرف", "نام", "عادی", "سحاب", "پل", "پرداخت", "دریافت", "صورتحساب", "گردش",
+    "وجه", "عملیات", "مشتری", "گرامی", "محترم", "عزیز"
   ]);
 
   const words = cleaned.split(" ").filter((w) => w.length >= 3 && !stopWords.has(w));
