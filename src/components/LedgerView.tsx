@@ -25,6 +25,28 @@ export interface LedgerRow {
   balanceAfter: number;
 }
 
+export function ExcelIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14.5 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V7.5L14.5 2Z" fill="#107C41" />
+      <path d="M14 2V8H20" fill="#21A366" />
+      <path d="M7.5 11.5L10.5 16.5M10.5 11.5L7.5 16.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M13 12H17M13 14H17M13 16H17" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PdfIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14.5 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V7.5L14.5 2Z" fill="#E11D48" />
+      <path d="M14 2V8H20" fill="#BE123C" />
+      <path d="M7 13.5C7 12.67 7.67 12 8.5 12H9.5C10.33 12 11 12.67 11 13.5V14C11 14.83 10.33 15.5 9.5 15.5H8.2V17H7V13.5ZM8.2 14.3H9.4C9.62 14.3 9.8 14.12 9.8 13.9V13.6C9.8 13.38 9.62 13.2 9.4 13.2H8.2V14.3Z" fill="white" />
+      <path d="M12.5 12H14C15.1 12 16 12.9 16 14V15C16 16.1 15.1 17 14 17H12.5V12ZM13.7 15.8H14C14.44 15.8 14.8 15.44 14.8 15V14C14.8 13.56 14.44 13.2 14 13.2H13.7V15.8Z" fill="white" />
+    </svg>
+  );
+}
+
 interface Props {
   account: Account;
   allAccounts?: Account[];
@@ -216,20 +238,20 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={handleExportCsv}
-          className="px-3 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-2xl text-xs font-semibold flex items-center gap-1 shrink-0 transition shadow-sm"
+          className="px-3 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-2xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition shadow-sm"
           title="خروجی اکسل این صورت‌حساب"
         >
-          <FileSpreadsheet className="w-3.5 h-3.5" />
+          <ExcelIcon className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">اکسل</span>
         </button>
         <button
           type="button"
           onClick={handlePrintPdf}
-          className="px-3 py-2.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-2xl text-xs font-semibold flex items-center gap-1 shrink-0 transition shadow-sm"
+          className="px-3 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-2xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition shadow-sm"
           title="چاپ یا ذخیره به عنوان PDF"
         >
-          <Printer className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">چاپ/PDF</span>
+          <PdfIcon className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">PDF</span>
         </button>
       </div>
 

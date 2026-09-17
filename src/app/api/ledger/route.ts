@@ -156,13 +156,16 @@ export async function GET(req: Request) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>صورت‌حساب - ${account.name}</title>
+  <title>صورت‌حساب ${account.name}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="/js/html2pdf.bundle.min.js"></script>
   <style>
     @page { size: A4 portrait; margin: 8mm; }
     * { box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
       background: #f8fafc;
       color: #0f172a;
       margin: 0;
@@ -325,25 +328,26 @@ export async function GET(req: Request) {
       border: 1px solid #e2e8f0;
       border-radius: 8px;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
     th {
       background: #f1f5f9;
       color: #334155;
       font-weight: 600;
-      text-align: right;
-      padding: 9px 10px;
+      text-align: center;
+      padding: 9px 6px;
       border: 1px solid #e2e8f0;
       white-space: nowrap;
     }
     td {
-      padding: 8px 10px;
+      padding: 8px 6px;
       border: 1px solid #e2e8f0;
       color: #334155;
+      text-align: center;
       vertical-align: middle;
+      word-break: break-word;
     }
     tr:nth-child(even) td { background: #fafafa; }
     .text-center { text-align: center; }
-    .text-left { text-align: left; }
     .nowrap { white-space: nowrap; }
     @media print {
       body { padding: 0; background: #fff; }
@@ -351,7 +355,7 @@ export async function GET(req: Request) {
       .page-container { border: none !important; box-shadow: none !important; padding: 0 !important; }
       .table-wrapper { overflow: visible !important; border: none !important; }
       table { width: 100% !important; page-break-inside: auto; font-size: 10.5px; }
-      th, td { padding: 7px 8px !important; }
+      th, td { padding: 6px 5px !important; text-align: center !important; }
       tr { page-break-inside: avoid; page-break-after: auto; }
       .stats { grid-template-columns: repeat(4, 1fr) !important; }
     }
@@ -382,7 +386,7 @@ export async function GET(req: Request) {
   <div class="page-container">
     <div class="header">
       <div>
-        <h1 class="title">صورت‌حساب: ${account.name}</h1>
+        <h1 class="title">صورت‌حساب ${account.name}</h1>
         <div class="meta">
           بازه گزارش: ${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}
           ${searchParams.get("query") ? ` | فیلتر جستجو: «${searchParams.get("query")}»` : ""}
@@ -414,10 +418,10 @@ export async function GET(req: Request) {
       <table>
         <thead>
           <tr>
-            <th style="width: 28%;">تاریخ / مبدأ و مقصد</th>
-            <th>شرح تراکنش</th>
-            <th style="width: 22%;" class="text-left">مبلغ (ریال)</th>
-            <th style="width: 20%;" class="text-left">مانده (ریال)</th>
+            <th style="width: 22%;">تاریخ / طرفین</th>
+            <th style="width: 40%;">شرح تراکنش</th>
+            <th style="width: 19%;">مبلغ (ریال)</th>
+            <th style="width: 19%;">مانده (ریال)</th>
           </tr>
         </thead>
         <tbody>
@@ -436,21 +440,20 @@ export async function GET(req: Request) {
               }
 
               const amountColor = isIn ? "#16a34a" : "#dc2626";
-              const amountSign = isIn ? "+" : "-";
 
               return `<tr>
-                <td>
+                <td class="text-center">
                   <div style="font-weight: 600; color: #0f172a; white-space: nowrap;">${r.shamsiDate || "-"}</div>
                   <div style="font-size: 9.5px; color: #64748b; margin-top: 3px;">${partiesLabel}</div>
                 </td>
-                <td>
+                <td class="text-center">
                   <div style="color: #1e293b; line-height: 1.4;">${r.description || "-"}</div>
                   ${r.fee ? `<div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">کارمزد: ${formatNum(r.fee)} ریال</div>` : ""}
                 </td>
-                <td class="text-left nowrap" style="color: ${amountColor}; font-weight: 700; font-size: 11.5px;">
-                  ${amountSign}${formatNum(r.amount)}
+                <td class="text-center nowrap" style="color: ${amountColor}; font-weight: 700; font-size: 11.5px;">
+                  ${formatNum(r.amount)}
                 </td>
-                <td class="text-left nowrap" style="font-weight: 700; color: #0f172a; background: #f8fafc; font-size: 11.5px;">
+                <td class="text-center nowrap" style="font-weight: 700; color: #0f172a; background: #f8fafc; font-size: 11.5px;">
                   ${formatNum(r.balanceAfter)}
                 </td>
               </tr>`;
