@@ -215,7 +215,13 @@ export async function GET(req: Request) {
     .action-bar-inner {
       display: flex;
       flex-direction: column;
+      gap: 10px;
+    }
+    .btn-group {
+      display: flex;
+      flex-direction: column;
       gap: 8px;
+      width: 100%;
     }
     .print-btn {
       width: 100%;
@@ -235,21 +241,53 @@ export async function GET(req: Request) {
       user-select: none;
     }
     .print-btn:active { background: #0369a1; transform: scale(0.99); }
+    .btn-copy {
+      width: 100%;
+      padding: 10px 16px;
+      background: #ffffff;
+      color: #0369a1;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      touch-action: manipulation;
+    }
+    .btn-copy:active { background: #f0f9ff; }
+    .copy-toast {
+      display: none;
+      font-size: 11px;
+      color: #15803d;
+      background: #dcfce7;
+      border: 1px solid #bbf7d0;
+      padding: 6px 12px;
+      border-radius: 6px;
+      text-align: center;
+      animation: fadeIn 0.2s ease-in-out;
+    }
     .ios-hint {
       font-size: 10.5px;
       color: #0369a1;
-      line-height: 1.5;
+      line-height: 1.6;
       background: #e0f2fe;
       padding: 8px 12px;
       border-radius: 8px;
     }
     @media (min-width: 640px) {
+      body { padding: 16px; }
       .action-bar-inner {
+        flex-direction: column;
+        gap: 8px;
+      }
+      .btn-group {
         flex-direction: row;
         align-items: center;
-        justify-content: space-between;
       }
       .print-btn { width: auto; }
+      .btn-copy { width: auto; }
     }
     .page-container {
       background: #ffffff;
@@ -355,11 +393,17 @@ export async function GET(req: Request) {
 <body>
   <div class="no-print action-bar">
     <div class="action-bar-inner">
-      <button id="printBtn" class="print-btn" type="button" onclick="triggerPrint()">
-        🖨️ چاپ / ذخیره به عنوان PDF
-      </button>
+      <div class="btn-group">
+        <button id="printBtn" class="print-btn" type="button" onclick="triggerPrintOrShare()">
+          🖨️ چاپ / ذخیره به عنوان PDF
+        </button>
+        <button class="btn-copy" type="button" onclick="copyReportLink()">
+          📋 کپی لینک گزارش جهت باز کردن در سافاری
+        </button>
+      </div>
+      <div id="copyToast" class="copy-toast">✅ لینک کپی شد! می‌توانید آن را در مرورگر Safari باز کنید.</div>
       <div class="ios-hint">
-        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه بالا، در پنجره پرینت با دو انگشت روی برگه زوم به بیرون کنید (Pinch-Out) تا سند PDF شود، سپس با انتخاب <b>Share</b> و <b>Save to Files</b> آن را ذخیره فرمایید.
+        📱 <b>راهنمای کاربران آیفون:</b> با زدن دکمه بالا، منوی استاندارد آیفون باز می‌شود؛ برای چاپ <b>Print</b> و برای ذخیره سند <b>Save to Files</b> را انتخاب فرمایید. همچنین با دکمه «کپی لینک» می‌توانید گزارش را مستقیماً در مرورگر کامل Safari باز کنید.
       </div>
     </div>
   </div>
@@ -482,9 +526,55 @@ export async function GET(req: Request) {
   </div>
 
   <script>
-    function triggerPrint() {
-      window.print();
+    async function triggerPrintOrShare() {
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isStandalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+      // در آیفون (به‌ویژه وب‌اپلیکیشن هوم‌اسکرین که window.print مسدود است) از منوی سیستمی نیتیو استفاده می‌شود
+      if (isIOS && navigator.share) {
+        try {
+          await navigator.share({
+            title: document.title,
+            url: window.location.href,
+          });
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+
+      // سایر سیستم‌ها و دسکتاپ
+      try {
+        window.print();
+      } catch (e) {
+        if (navigator.share) {
+          navigator.share({ title: document.title, url: window.location.href });
+        }
+      }
     }
+
+    async function copyReportLink() {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(window.location.href);
+        } else {
+          const inp = document.createElement("input");
+          inp.value = window.location.href;
+          document.body.appendChild(inp);
+          inp.select();
+          document.execCommand("copy");
+          document.body.removeChild(inp);
+        }
+        const toast = document.getElementById("copyToast");
+        if (toast) {
+          toast.style.display = "block";
+          setTimeout(() => { toast.style.display = "none"; }, 4000);
+        }
+      } catch (err) {
+        prompt("آدرس گزارش جهت باز کردن در مرورگر سافاری:", window.location.href);
+      }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (!isMobile) {
