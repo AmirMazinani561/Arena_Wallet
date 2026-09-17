@@ -17,6 +17,7 @@ import {
   Printer,
 } from "lucide-react";
 import { ShamsiDatePicker } from "./ShamsiDatePicker";
+import { ExcelIcon, PdfIcon } from "./LedgerView";
 
 interface Props {
   onFilterTransactionsByAccount: (accountId: string) => void;
@@ -142,20 +143,20 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
           <button
             type="button"
             onClick={handleExportCsv}
-            className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm"
+            className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
             title="خروجی اکسل گزارش تحلیلی این بازه"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <ExcelIcon className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">خروجی</span> اکسل
           </button>
           <button
             type="button"
             onClick={handlePrintPdf}
-            className="px-2.5 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm"
+            className="px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
             title="چاپ یا ذخیره به عنوان PDF گزارش تحلیلی"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>چاپ / PDF</span>
+            <PdfIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>PDF</span>
           </button>
         </div>
       </div>
