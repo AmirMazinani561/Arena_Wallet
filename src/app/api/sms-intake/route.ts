@@ -81,6 +81,31 @@ function extractAccountCredentials(acc: AccountRow): AccountCredentials {
   const fullIbans: string[] = [];
   const last4s = new Set<string>();
 
+  // ۰) استخراج اختصاصی شماره حساب کامل از کادر توضیحات تکمیلی (detailInfo)
+  if (acc.detailInfo) {
+    const normDetail = normalizeSmsText(acc.detailInfo).trim();
+    // ارقام خالص کل کادر توضیحات تکمیلی (شماره حساب مرجع کاربر)
+    const pureDetail = normDetail.replace(/\D/g, "");
+    if (pureDetail.length >= 4 && pureDetail.length <= 30) {
+      if (!fullAccounts.includes(pureDetail)) fullAccounts.push(pureDetail);
+      last4s.add(pureDetail.slice(-4));
+    }
+
+    // بررسی فرمت نقطه‌دار یا خط‌تیره‌دار (پاسارگاد، سامان و ...) در توضیحات تکمیلی
+    const dottedMatch = normDetail.match(/([0-9][0-9.\-]{4,})/);
+    if (dottedMatch) {
+      const rawDotted = dottedMatch[1].replace(/[\.\-]+$/, "");
+      const cleanDotted = rawDotted.replace(/\D/g, "");
+      if (cleanDotted.length >= 4 && !fullAccounts.includes(cleanDotted)) {
+        fullAccounts.push(cleanDotted);
+      }
+      const stripped = rawDotted.replace(/[\.\-]\d+$/, "").replace(/\D/g, "");
+      if (stripped && stripped.length >= 4 && !coreAccounts.includes(stripped)) {
+        coreAccounts.push(stripped);
+      }
+    }
+  }
+
   const combined = `${acc.name} ${acc.detailInfo || ""}`;
   const norm = normalizeSmsText(combined);
 
@@ -115,19 +140,19 @@ function extractAccountCredentials(acc: AccountRow): AccountCredentials {
   for (const m of norm.matchAll(/(?:^|[\s;_])([0-9][0-9.\-]{4,})(?=[\s;_]|$)/g)) {
     const rawTok = m[1];
     const clean = rawTok.replace(/\D/g, "");
-    if (clean.length >= 6 && clean.length <= 18 && !fullCards.includes(clean)) {
+    if (clean.length >= 5 && clean.length <= 26 && !fullCards.includes(clean)) {
       if (!fullAccounts.includes(clean)) fullAccounts.push(clean);
       last4s.add(clean.slice(-4));
       const stripped = rawTok.replace(/[\.\-]\d+$/, "");
       const strippedClean = stripped.replace(/\D/g, "");
-      if (strippedClean !== clean && strippedClean.length >= 6) {
+      if (strippedClean !== clean && strippedClean.length >= 4) {
         if (!coreAccounts.includes(strippedClean)) coreAccounts.push(strippedClean);
       }
     }
   }
 
-  // ۴) استخراج شماره حساب‌های ساده (۵ تا ۱۸ رقم)
-  for (const m of norm.matchAll(/(?:^|\D)([0-9]{5,18})(?=\D|$)/g)) {
+  // ۴) استخراج شماره حساب‌های ساده (۴ تا ۲۴ رقم)
+  for (const m of norm.matchAll(/(?:^|\D)([0-9]{4,24})(?=\D|$)/g)) {
     const clean = m[1];
     if (!fullCards.includes(clean) && !fullIbans.includes(clean)) {
       if (!fullAccounts.includes(clean)) fullAccounts.push(clean);
@@ -339,31 +364,80 @@ export async function POST(req: Request) {
         }
       }
 
-      // ۱-ب) انطباق تمام ارقام شماره حساب یا شبا
+      // ۱-ب) انطباق تمام ارقام شماره حساب یا شبا + انطباق پسوندی (Suffix Matching)
       if (score < 200) {
+        let bestAccScore = 0;
+        let bestAccReason = "";
+
         for (const accTok of parsed.accountTokens) {
           const isFrom = accTok.side === "from";
           const isTo = accTok.side === "to";
           const pure = accTok.pureDigits;
+          if (!pure || pure.length < 4) continue;
 
-          if (cred.fullAccounts.includes(pure) || cred.coreAccounts.includes(pure) || cred.fullIbans.includes(pure)) {
+          // ۱-ب-۱) انطباق ۱۰۰٪ تمام ارقام شماره حساب یا شبا
+          const isExact =
+            cred.fullAccounts.includes(pure) ||
+            cred.coreAccounts.includes(pure) ||
+            cred.fullIbans.includes(pure);
+
+          if (isExact) {
+            let s = 250;
+            let r = `انطباق کامل شماره حساب (${pure.slice(-4)})`;
             if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
-              score += 250;
-              reasons.push(`انطباق کامل شماره حساب مبدأ (${pure.slice(-4)})`);
-              break;
+              s = 270;
+              r = `انطباق کامل شماره حساب مبدأ (${pure.slice(-4)})`;
             } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
-              score += 250;
-              reasons.push(`انطباق کامل شماره حساب مقصد (${pure.slice(-4)})`);
-              break;
+              s = 270;
+              r = `انطباق کامل شماره حساب مقصد (${pure.slice(-4)})`;
             } else if (likelyWithdrawal && isTo) {
-              score += 30;
-              reasons.push(`حساب مقصد تراکنش (${pure.slice(-4)})`);
-            } else {
-              score += 230;
-              reasons.push(`انطباق کامل شماره حساب (${pure.slice(-4)})`);
-              break;
+              s = 30;
+              r = `حساب مقصد تراکنش (${pure.slice(-4)})`;
+            }
+            if (s > bestAccScore) {
+              bestAccScore = s;
+              bestAccReason = r;
+            }
+            continue;
+          }
+
+          // ۱-ب-۲) انطباق پسوندی (Suffix-Matching) برای پیامک‌های با ارقام انتهایی حساب (مثل حساب:55009 در صادرات)
+          for (const userAcc of cred.fullAccounts) {
+            if (userAcc.length > pure.length && userAcc.endsWith(pure)) {
+              const suffixLen = pure.length;
+              let s = Math.min(260, 190 + suffixLen * 12);
+              let r = `انطباق پسوند ${suffixLen} رقمی حساب (${pure})`;
+
+              if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
+                s += 20;
+                r = `انطباق پسوند ${suffixLen} رقمی حساب مبدأ (${pure})`;
+              } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
+                s += 20;
+                r = `انطباق پسوند ${suffixLen} رقمی حساب مقصد (${pure})`;
+              } else if (likelyWithdrawal && isTo) {
+                s = 30;
+                r = `حساب مقصد تراکنش (${pure})`;
+              }
+
+              if (s > bestAccScore) {
+                bestAccScore = s;
+                bestAccReason = r;
+              }
+            } else if (pure.length > userAcc.length && pure.endsWith(userAcc) && userAcc.length >= 4) {
+              const suffixLen = userAcc.length;
+              let s = Math.min(250, 185 + suffixLen * 10);
+              let r = `انطباق پسوند ${suffixLen} رقمی حساب (${userAcc})`;
+              if (s > bestAccScore) {
+                bestAccScore = s;
+                bestAccReason = r;
+              }
             }
           }
+        }
+
+        if (bestAccScore > 0) {
+          score += bestAccScore;
+          reasons.push(bestAccReason);
         }
       }
 
@@ -595,10 +669,16 @@ export async function POST(req: Request) {
       const matchedCred = extractAccountCredentials(matched);
       const inFrom =
         parsed.fromSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
-        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c)) ||
+        parsed.accountTokens.some(
+          (a) => a.side === "from" && matchedCred.fullAccounts.some((u) => u.endsWith(a.pureDigits) || a.pureDigits.endsWith(u))
+        );
       const inTo =
         parsed.toSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
-        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c)) ||
+        parsed.accountTokens.some(
+          (a) => a.side === "to" && matchedCred.fullAccounts.some((u) => u.endsWith(a.pureDigits) || a.pureDigits.endsWith(u))
+        );
       if (inTo && !inFrom) kind = "deposit";
       else if (inFrom && !inTo) kind = "withdrawal";
     }
