@@ -1382,8 +1382,8 @@ export async function replaceAll(
 
     for (const a of accountsData) {
       await tx.execute(
-        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order, monthly_budget)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           a.id,
           a.type,
@@ -1396,6 +1396,7 @@ export async function replaceAll(
           a.icon || "wallet",
           a.color || "#0284c7",
           a.sortOrder || 0,
+          a.monthlyBudget || 0,
         ]
       );
     }
