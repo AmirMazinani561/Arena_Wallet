@@ -4,7 +4,7 @@ import { blurOnEnter } from "@/lib/use-visual-viewport";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Account } from "@/types";
 import { formatMoney, getCurrentShamsi, buildShamsi, shamsiMonthEnd, toPersianDigits } from "@/lib/date-utils";
-import { Search, X, ArrowRight, SlidersHorizontal, Loader2 } from "lucide-react";
+import { Search, X, ArrowRight, SlidersHorizontal, Loader2, FileSpreadsheet, Printer } from "lucide-react";
 import { ShamsiDatePicker } from "./ShamsiDatePicker";
 
 const PAGE_SIZE = 40;
@@ -104,6 +104,32 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
     }
   };
 
+  const handleExportCsv = () => {
+    const p = new URLSearchParams();
+    p.set("accountId", account.id);
+    p.set("limit", "10000");
+    if (debounced.trim()) p.set("query", debounced.trim());
+    if (dateFilterOn) {
+      p.set("startDate", startDate);
+      p.set("endDate", endDate);
+    }
+    p.set("format", "csv");
+    window.location.href = `/api/ledger?${p.toString()}`;
+  };
+
+  const handlePrintPdf = () => {
+    const p = new URLSearchParams();
+    p.set("accountId", account.id);
+    p.set("limit", "10000");
+    if (debounced.trim()) p.set("query", debounced.trim());
+    if (dateFilterOn) {
+      p.set("startDate", startDate);
+      p.set("endDate", endDate);
+    }
+    p.set("format", "print");
+    window.open(`/api/ledger?${p.toString()}`, "_blank");
+  };
+
   const parentName =
     serverParentName ||
     (account.parentId && allAccounts ? allAccounts.find((a) => a.id === account.parentId)?.name : null);
@@ -144,9 +170,9 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         </div>
       </div>
 
-      {/* جستجو + فیلتر تاریخ */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
+      {/* جستجو + فیلتر تاریخ + خروجی اکسل و چاپ/PDF */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <div className="relative flex-1 min-w-[170px]">
           <input
             type="text"
             value={search}
@@ -170,7 +196,7 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={() => setDateFilterOn(!dateFilterOn)}
-          className={`px-3 rounded-2xl text-xs font-semibold transition flex items-center gap-1 shrink-0 ${
+          className={`px-3 py-2.5 rounded-2xl text-xs font-semibold transition flex items-center gap-1 shrink-0 ${
             dateFilterOn
               ? "bg-amber-500 text-white shadow-sm"
               : "bg-white text-slate-600 border border-sky-100 shadow-sm"
@@ -178,6 +204,24 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
           <span>تاریخ</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          className="px-3 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-2xl text-xs font-semibold flex items-center gap-1 shrink-0 transition shadow-sm"
+          title="خروجی اکسل این صورت‌حساب"
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">اکسل</span>
+        </button>
+        <button
+          type="button"
+          onClick={handlePrintPdf}
+          className="px-3 py-2.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-2xl text-xs font-semibold flex items-center gap-1 shrink-0 transition shadow-sm"
+          title="چاپ یا ذخیره به عنوان PDF"
+        >
+          <Printer className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">چاپ/PDF</span>
         </button>
       </div>
 
