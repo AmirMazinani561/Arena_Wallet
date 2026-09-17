@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { translateDbError } from "@/db/client";
 import { ensureDatabase, listAccounts, getLedger } from "@/db/repo";
 import { getSessionFromRequest } from "@/lib/session";
+import { getCurrentShamsi } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,10 @@ export async function GET(req: Request) {
       offset: Number.isFinite(offset) ? offset : 0,
     });
 
-    const stamp = new Date().toISOString().slice(0, 10);
+    const shamsiNow = getCurrentShamsi();
+    const stamp = shamsiNow.formatted;
+    const stampText = shamsiNow.fullText;
+
     const typeLabel =
       account.type === "bank"
         ? "بانک"
@@ -68,32 +72,35 @@ export async function GET(req: Request) {
         ? "سرفصل هزینه"
         : "سرفصل درآمد";
 
-    /* ---------- خروجی اکسل (CSV UTF-8 BOM) برای دفتر معین همین حساب ---------- */
+    /* ---------- خروجی اکسل (CSV UTF-8 BOM با تفکیک استاندارد ستون‌ها) ---------- */
     if (format === "csv") {
       const csvRows: string[] = [];
-      csvRows.push(`"گزارش صورت‌حساب دفتر معین - ${account.name.replace(/"/g, '""')}"`);
       csvRows.push(
-        `"نوع حساب","${typeLabel}","تاریخ تولید","${stamp}","بازه زمانی","${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}"`
+        [`"صورت‌حساب دفتر معین"`, `"${account.name.replace(/"/g, '""')}"`].join(","),
+        [`"نوع حساب"`, `"${typeLabel}"`].join(","),
+        [`"تاریخ چاپ (شمسی)"`, `"${stamp}"`].join(","),
+        [`"بازه زمانی"`, `"${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}"`].join(","),
+        [`"مانده ابتدای دوره (ریال)"`, `"${result.openingBalance}"`].join(","),
+        [`"مانده انتهای دوره (ریال)"`, `"${result.closingBalance}"`].join(","),
+        [`"تعداد کل تراکنش‌ها"`, `"${result.total}"`].join(","),
+        ""
       );
-      csvRows.push(
-        `"مانده ابتدای دوره (ریال)","${result.openingBalance}","مانده انتهای دوره (ریال)","${result.closingBalance}","تعداد تراکنش‌ها","${result.total}"`
-      );
-      csvRows.push("");
 
+      // ترتیب دقیق ستون‌ها مطابق درخواست کاربر:
+      // ردیف - تاریخ شمسی - طرف حساب - واریز (بدهکار) - برداشت (بستانکار) - کارمزد - مانده حساب - شرح تراکنش - شماره پیگیری
       csvRows.push(
         [
           "ردیف",
-          "شناسه",
           "تاریخ شمسی",
+          "طرف حساب",
+          "واریز (بدهکار)",
+          "برداشت (بستانکار)",
+          "کارمزد",
+          "مانده حساب",
           "شرح تراکنش",
-          "طرف حساب / سرفصل",
-          isAsset ? "واریز / بدهکار (ریال)" : "مبلغ (ریال)",
-          isAsset ? "برداشت / بستانکار (ریال)" : "جهت",
-          "کارمزد (ریال)",
-          isAsset ? "مانده پس از تراکنش (ریال)" : "گردش تجمعی (ریال)",
           "شماره پیگیری",
         ]
-          .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+          .map((c) => `"${c}"`)
           .join(",")
       );
 
@@ -108,14 +115,13 @@ export async function GET(req: Request) {
         csvRows.push(
           [
             String(idx + 1),
-            r.id,
             r.shamsiDate || "",
-            r.description || "",
             cp,
-            isAsset ? String(inflow) : String(r.amount),
-            isAsset ? String(outflow) : isIn ? "افزایشی" : "کاهشی",
+            String(inflow),
+            String(outflow),
             String(r.fee || 0),
             String(r.balanceAfter),
+            r.description || "",
             r.trackingNumber || "",
           ]
             .map((c) => `"${String(c).replace(/"/g, '""')}"`)
@@ -123,12 +129,13 @@ export async function GET(req: Request) {
         );
       });
 
-      const csvContent = "\uFEFF" + csvRows.join("\r\n");
+      // شناسه \uFEFF برای سازگاری فارسی و sep=, برای تفکیک خودکار و قطعی ستون‌ها در مایکروسافت اکسل
+      const csvContent = "\uFEFFsep=,\r\n" + csvRows.join("\r\n");
       return new Response(csvContent, {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="ledger_${stamp}.csv"`,
+          "Content-Disposition": `attachment; filename="ledger_${stamp.replace(/\//g, "-")}.csv"`,
         },
       });
     }
@@ -148,6 +155,7 @@ export async function GET(req: Request) {
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>صورت‌حساب دفتر معین - ${account.name}</title>
   <style>
     @page { size: A4 portrait; margin: 10mm; }
@@ -160,6 +168,55 @@ export async function GET(req: Request) {
       padding: 16px;
       font-size: 11px;
       line-height: 1.5;
+    }
+    .action-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);
+    }
+    .action-bar-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .print-btn {
+      width: 100%;
+      padding: 12px 20px;
+      background: #0284c7;
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .print-btn:active { background: #0369a1; }
+    .ios-hint {
+      font-size: 10px;
+      color: #0369a1;
+      line-height: 1.5;
+      background: #e0f2fe;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    @media (min-width: 640px) {
+      .action-bar-inner {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .print-btn { width: auto; }
     }
     .header {
       display: flex;
@@ -204,48 +261,35 @@ export async function GET(req: Request) {
       color: #334155;
     }
     tr:nth-child(even) td { background: #fafafa; }
-    .badge {
-      display: inline-block;
-      padding: 2px 5px;
-      border-radius: 3px;
-      font-size: 8.5px;
-      font-weight: 600;
-    }
-    .badge-in { background: #dcfce7; color: #15803d; }
-    .badge-out { background: #fee2e2; color: #b91c1c; }
     .text-center { text-align: center; }
     .text-left { text-align: left; }
-    .print-btn {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      padding: 10px 18px;
-      background: #0284c7;
-      color: #fff;
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: bold;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
-    }
     @media print {
       body { padding: 0; }
-      .print-btn { display: none !important; }
+      .no-print { display: none !important; }
       table { page-break-inside: auto; }
       tr { page-break-inside: avoid; page-break-after: auto; }
     }
   </style>
 </head>
 <body>
+  <div class="no-print action-bar">
+    <div class="action-bar-inner">
+      <button class="print-btn" onclick="window.print()" ontouchend="window.print()">
+        🖨️ چاپ / ذخیره به عنوان PDF
+      </button>
+      <div class="ios-hint">
+        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه چاپ، در پیش‌نمایش پرینت با دو انگشت روی برگه زوم کنید (Pinch-Out) تا فایل PDF شود، سپس دکمه اشتراک <b>Share</b> را زده و <b>Save to Files</b> را انتخاب فرمایید.
+      </div>
+    </div>
+  </div>
+
   <div class="header">
     <div>
       <h1 class="title">صورت‌حساب دفتر معین: ${account.name} (${typeLabel})</h1>
       <div class="meta">
         بازه گزارش: ${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}
         ${searchParams.get("query") ? ` | فیلتر جستجو: «${searchParams.get("query")}»` : ""}
-        | تاریخ چاپ: ${stamp}
+        | تاریخ چاپ: ${stampText} (${stamp})
       </div>
     </div>
   </div>
@@ -272,14 +316,15 @@ export async function GET(req: Request) {
   <table>
     <thead>
       <tr>
-        <th class="text-center" style="width: 30px;">ردیف</th>
-        <th style="width: 65px;">تاریخ</th>
-        <th class="text-center" style="width: 45px;">جهت</th>
-        <th style="width: 85px;">مبلغ (ریال)</th>
-        <th style="width: 60px;">کارمزد</th>
-        <th style="width: 95px;">طرف حساب</th>
-        <th>شرح / شماره پیگیری</th>
-        <th style="width: 95px;" class="text-left">${isAsset ? "مانده لحظه‌ای" : "گردش تجمعی"}</th>
+        <th class="text-center" style="width: 32px;">ردیف</th>
+        <th style="width: 72px;">تاریخ شمسی</th>
+        <th style="width: 110px;">طرف حساب</th>
+        <th style="width: 85px;">واریز (بدهکار)</th>
+        <th style="width: 85px;">برداشت (بستانکار)</th>
+        <th style="width: 55px;">کارمزد</th>
+        <th style="width: 95px;" class="text-left">مانده حساب (ریال)</th>
+        <th>شرح تراکنش</th>
+        <th style="width: 75px;">شماره پیگیری</th>
       </tr>
     </thead>
     <tbody>
@@ -289,32 +334,32 @@ export async function GET(req: Request) {
           const cp = [r.counterpartyName, r.counterpartyParentName ? `(${r.counterpartyParentName})` : null]
             .filter(Boolean)
             .join(" ");
-          const desc = [r.description, r.trackingNumber ? `پیگیری: ${r.trackingNumber}` : null]
-            .filter(Boolean)
-            .join(" — ");
 
           return `<tr>
             <td class="text-center">${formatNum(idx + 1)}</td>
             <td>${r.shamsiDate || "-"}</td>
-            <td class="text-center"><span class="badge ${isIn ? "badge-in" : "badge-out"}">${isIn ? (isAsset ? "واریز" : "ورودی") : isAsset ? "برداشت" : "خروجی"}</span></td>
-            <td style="font-weight: bold;">${formatNum(r.amount)}</td>
-            <td>${r.fee ? formatNum(r.fee) : "-"}</td>
             <td>${cp || "-"}</td>
-            <td>${desc || "-"}</td>
-            <td class="text-left" style="font-weight: 600;">${formatNum(r.balanceAfter)}</td>
+            <td style="color: #16a34a; font-weight: 600;">${isIn ? formatNum(r.amount) : "-"}</td>
+            <td style="color: #dc2626; font-weight: 600;">${!isIn ? formatNum(r.amount) : "-"}</td>
+            <td>${r.fee ? formatNum(r.fee) : "-"}</td>
+            <td class="text-left" style="font-weight: bold; background: #f8fafc;">${formatNum(r.balanceAfter)}</td>
+            <td>${r.description || "-"}</td>
+            <td>${r.trackingNumber || "-"}</td>
           </tr>`;
         })
         .join("")}
     </tbody>
   </table>
 
-  <button class="print-btn" onclick="window.print()">🖨️ چاپ / ذخیره به عنوان PDF</button>
-
   <script>
+    // اجرای هوشمند پرینت در دسکتاپ پس از بارگذاری
     window.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        window.print();
-      }, 400);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (!isMobile) {
+        setTimeout(() => {
+          window.print();
+        }, 400);
+      }
     });
   </script>
 </body>
