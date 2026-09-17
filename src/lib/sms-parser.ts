@@ -623,8 +623,14 @@ export function parseBankSms(raw: string): ParsedSms {
     cardTokenSet.add(rawTok);
     const cleanDigits = rawTok.replace(/\D/g, "");
 
-    // شماره کارت ۱۶ رقمی کامل
-    if (cleanDigits.length === 16 && !rawTok.includes("*") && !rawTok.includes("x") && !rawTok.includes("X")) {
+    // شماره کارت ۱۶ رقمی کامل (بدون نقطه حساب)
+    if (
+      cleanDigits.length === 16 &&
+      !rawTok.includes("*") &&
+      !rawTok.includes("x") &&
+      !rawTok.includes("X") &&
+      !rawTok.includes(".")
+    ) {
       if (!fullCardNumbers.includes(cleanDigits)) fullCardNumbers.push(cleanDigits);
     }
     // شماره کارت ماسک‌شده دوطرفه یا یک‌طرفه
@@ -651,13 +657,16 @@ export function parseBankSms(raw: string): ParsedSms {
         }
       }
     }
-    // شماره حساب با ارقام خالص
-    else if (cleanDigits.length >= 6) {
-      accountTokens.push({
-        raw: rawTok,
-        pureDigits: cleanDigits,
-        side,
-      });
+
+    // شماره حساب با ارقام خالص (۴ رقم یا بیشتر) — شامل کدهای حساب بانکی کوتاه مثل حساب:55009 و حساب‌های بلند
+    if (cleanDigits.length >= 4 && cleanDigits.length <= 26) {
+      if (!accountTokens.some((a) => a.pureDigits === cleanDigits && a.side === side)) {
+        accountTokens.push({
+          raw: rawTok,
+          pureDigits: cleanDigits,
+          side,
+        });
+      }
     }
   };
 
@@ -744,7 +753,7 @@ export function parseBankSms(raw: string): ParsedSms {
     if (consumed.some((r) => overlaps(r, range))) continue;
     const beforeTxt = normalized.slice(Math.max(0, start - 12), start);
     const afterTxt = normalized.slice(range.end, range.end + 12);
-    if (/مبلغ|انتقال|برداشت|واریز|کارمزد/.test(beforeTxt)) continue;
+    if (/مبلغ|کارمزد/.test(beforeTxt)) continue;
     if (/ریال|ريال|تومان|تومن/.test(afterTxt)) continue;
     recordToken(m[1], "general");
     consumed.push(range);
