@@ -148,6 +148,7 @@ export async function GET(req: Request) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>صورت‌حساب دفتر معین - ${account.name}</title>
+  <script src="/js/html2pdf.bundle.min.js"></script>
   <style>
     @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing: border-box; }
@@ -182,10 +183,10 @@ export async function GET(req: Request) {
       gap: 8px;
       width: 100%;
     }
-    .print-btn {
+    .btn-save {
       width: 100%;
       padding: 14px 22px;
-      background: #0284c7;
+      background: #059669;
       color: #fff;
       font-family: inherit;
       font-size: 13.5px;
@@ -194,16 +195,17 @@ export async function GET(req: Request) {
       border-radius: 10px;
       cursor: pointer;
       text-align: center;
-      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+      box-shadow: 0 2px 8px rgba(5, 150, 105, 0.25);
       touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
       user-select: none;
+      transition: background 0.15s, transform 0.1s;
     }
-    .print-btn:active { background: #0369a1; transform: scale(0.99); }
-    .btn-save {
+    .btn-save:active { background: #047857; transform: scale(0.99); }
+    .btn-save:disabled { opacity: 0.6; cursor: wait; }
+    .print-btn {
       width: 100%;
       padding: 12px 18px;
-      background: #059669;
+      background: #0284c7;
       color: #fff;
       font-family: inherit;
       font-size: 12.5px;
@@ -212,11 +214,11 @@ export async function GET(req: Request) {
       border-radius: 10px;
       cursor: pointer;
       text-align: center;
-      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.2);
       touch-action: manipulation;
       user-select: none;
     }
-    .btn-save:active { background: #047857; transform: scale(0.99); }
+    .print-btn:active { background: #0369a1; transform: scale(0.99); }
     .btn-copy {
       width: 100%;
       padding: 10px 16px;
@@ -349,22 +351,20 @@ export async function GET(req: Request) {
   <div class="no-print action-bar">
     <div class="action-bar-inner">
       <div class="btn-group">
-        <button id="printBtn" class="print-btn" type="button" onclick="triggerPrintOrShare()">
-          🖨️ چاپ / اشتراک‌گذاری
+        <button id="savePdfBtn" class="btn-save" type="button" onclick="triggerSaveToPdf()">
+          📥 ذخیره مستقیم فایل PDF (Save to Files)
         </button>
-        <button class="btn-save" type="button" onclick="triggerSaveToFile()">
-          📁 ذخیره سند در فایل‌ها (Save to Files)
+        <button id="printBtn" class="print-btn" type="button" onclick="triggerPrintOrShare()">
+          🖨️ چاپ با پرینتر (AirPrint)
         </button>
         <button class="btn-copy" type="button" onclick="copyReportLink()">
-          📋 کپی لینک جهت باز کردن در سافاری
+          📋 کپی لینک برای مرورگر سافاری
         </button>
       </div>
-      <div id="copyToast" class="copy-toast">✅ لینک معتبر کپی شد! می‌توانید آن را در مرورگر Safari بدون نیاز به ورود مجدد باز کنید.</div>
+      <div id="copyToast" class="copy-toast">✅ لینک معتبر کپی شد! می‌توانید آن را در مرورگر Safari باز کنید.</div>
       <div class="ios-hint">
-        📱 <b>راهنمای کاربران آیفون:</b>
-        <br>• <b>ذخیره مستقیم در Files:</b> دکمه سبز <b>«ذخیره سند در فایل‌ها»</b> را بزنید تا گزینه <b>Save to Files</b> مستقیماً باز شود.
-        <br>• <b>چاپ یا تبدیل به PDF در پرینت:</b> دکمه آبی <b>«چاپ / اشتراک»</b> را بزنید؛ در پنجره بازشده <b>Print</b> را انتخاب کنید و در پیش‌نمایش پرینت با دو انگشت زوم به بیرون (Pinch-Out) کنید تا سند PDF شود، سپس <b>Save to Files</b> را بزنید.
-        <br>• <b>باز کردن در مرورگر Safari:</b> دکمه <b>«کپی لینک»</b> را بزنید و در برنامه Safari پیست کنید تا تمام امکانات چاپ و ذخیره در مرورگر فعال شوند.
+        📱 <b>راهنمای آیفون برای ذخیره در Files:</b>
+        با زدن دکمه سبز <b>«ذخیره مستقیم فایل PDF»</b>، فایل واقعی پی‌دی‌اف ساخته شده و گزینه <b>Save to Files</b> مستقیماً در گوشی باز می‌شود (دقیقاً مشابه دانلود فایل اکسل).
       </div>
     </div>
   </div>
@@ -481,30 +481,58 @@ export async function GET(req: Request) {
       }
     }
 
-    async function triggerSaveToFile() {
+    async function triggerSaveToPdf() {
+      const btn = document.getElementById("savePdfBtn");
+      const originalText = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ در حال ساخت فایل PDF...";
+      }
+
       try {
-        const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-        const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
         const cleanTitle = (document.title || "صورت‌حساب").replace(/[\\/:*?"<>|]/g, "_");
-        const file = new File([blob], cleanTitle + ".html", { type: "text/html" });
+        const element = document.querySelector(".page-container") || document.body;
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: document.title,
-          });
-          return;
+        if (typeof html2pdf !== "undefined") {
+          const opt = {
+            margin: [8, 6, 8, 6],
+            filename: cleanTitle + ".pdf",
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+          };
+
+          const pdfBlob = await html2pdf().set(opt).from(element).outputPdf("blob");
+          const pdfFile = new File([pdfBlob], cleanTitle + ".pdf", { type: "application/pdf" });
+
+          // ۱. در آیفون: ارسال مستقیم فایل PDF تا گزینه Save to Files ظاهر شود
+          if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            await navigator.share({
+              files: [pdfFile],
+              title: document.title,
+            });
+          } else {
+            // ۲. دانلود مستقیم فایل PDF
+            const blobUrl = URL.createObjectURL(pdfBlob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = cleanTitle + ".pdf";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+          }
+        } else {
+          triggerPrintOrShare();
         }
-
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = cleanTitle + ".html";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
       } catch (err) {
         if (err && err.name === "AbortError") return;
-        triggerPrintOrShare();
+        alert("تولید PDF با خطا مواجه شد؛ لطفاً از دکمه چاپ استفاده فرمایید.");
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
       }
     }
 
