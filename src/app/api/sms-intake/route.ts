@@ -199,7 +199,13 @@ export async function POST(req: Request) {
       if (score >= 45) {
         matched = acc;
         matchedVia = "الگوی آموزش‌داده‌شده";
-        patternMatchedKind = pat.kind;
+        // نوع تراکنش از الگو فقط در صورتی استنباط می‌شود که کلمات جهت‌دار متناظر در پیامک وجود داشته باشند
+        // تطبیق شماره کارت صرفاً حساب بانکی را تعیین می‌کند نه جهت تراکنش را
+        if (pat.kind === "deposit" && /(?:واریز|نشست|وصول|بستانکار|\+)/.test(rawText)) {
+          patternMatchedKind = "deposit";
+        } else if (pat.kind === "withdrawal" && /(?:برداشت|خرید|پرید|بدهکار|کارمزد|\-)/.test(rawText)) {
+          patternMatchedKind = "withdrawal";
+        }
         break;
       }
     }
@@ -278,7 +284,10 @@ export async function POST(req: Request) {
     }
 
     if (kind === "unknown") {
-      if (/(?:واریز|افزایش|بستانکار|سود|حقوق|نشست|وصول)/.test(rawText)) kind = "deposit";
+      if (/انتقال\s*\+\s*کارمزد/.test(rawText)) kind = "withdrawal";
+      else if (/انتقال\s*:\s*[\d,]+\s*\+/.test(rawText)) kind = "deposit";
+      else if (/انتقال\s*:\s*[\d,]+\s*\-/.test(rawText)) kind = "withdrawal";
+      else if (/(?:واریز|افزایش|بستانکار|سود|حقوق|نشست|وصول)/.test(rawText)) kind = "deposit";
       else if (/(?:برداشت|کاهش|بدهکار|خرید|پایا|ساتنا|کارمزد|پرید)/.test(rawText)) kind = "withdrawal";
       else kind = "withdrawal";
     }

@@ -69,10 +69,11 @@ export function normalizeSmsText(raw: string): string {
   s = s.replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)));
   s = s.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
   s = s.replace(/ي/g, "ی").replace(/ك/g, "ک").replace(/[ةۀ]/g, "ه");
-  s = s.replace(/[−–—]/g, "-");
+  s = s.replace(/[\u2212\u2010-\u2015\u207b\u208b\ufe58\ufe63\uff0d−–—]/g, "-");
+  s = s.replace(/[\u207a\u208a\ufe62\uff0b]/g, "+");
   s = s.replace(/٬/g, ",");
   s = s.replace(/[،؛]/g, ";");
-  s = s.replace(/\u00a0/g, " ");
+  s = s.replace(/[\u00a0\u2009\u200a\u202f]/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   return s;
 }
@@ -91,6 +92,7 @@ const DEPOSIT_HINTS: [RegExp, number][] = [
   [/واریز/g, 3],
   [/نشست/g, 3],
   [/وصول/g, 3],
+  [/انتقال\s*:\s*[\d,]+\s*\+/g, 3],
   [/انتقال\s+از/g, 2],
   [/به\s+حساب\s+شما/g, 2],
   [/دریافت/g, 1],
@@ -102,6 +104,8 @@ const WITHDRAW_HINTS: [RegExp, number][] = [
   [/برداشت/g, 3],
   [/پرید/g, 3],
   [/خرید/g, 3],
+  [/انتقال\s*\+\s*کارمزد/g, 4],
+  [/انتقال\s*:\s*[\d,]+\s*\-/g, 3],
   [/پرداخت/g, 2],
   [/انتقال\s+(?:وجه\s+)?به/g, 2],
   [/خودپرداز/g, 1],
