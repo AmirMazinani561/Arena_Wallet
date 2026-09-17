@@ -7,6 +7,7 @@ import {
   getReportAggregates,
 } from "@/db/repo";
 import { getSessionFromRequest } from "@/lib/session";
+import { getCurrentShamsi } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -87,9 +88,11 @@ export async function GET(req: Request) {
     }
 
     const format = searchParams.get("format");
-    const stamp = new Date().toISOString().slice(0, 10);
+    const shamsiNow = getCurrentShamsi();
+    const stamp = shamsiNow.formatted;
+    const stampText = shamsiNow.fullText;
 
-    /* ---------- خروجی فایل اکسل (CSV با پشتیبانی کامل UTF-8 BOM فارسی) ---------- */
+    /* ---------- خروجی فایل اکسل (CSV با پشتیبانی کامل UTF-8 BOM فارسی و تفکیک ستون‌ها) ---------- */
     if (format === "csv") {
       const csvRows: string[] = [];
 
@@ -98,7 +101,7 @@ export async function GET(req: Request) {
       csvRows.push(
         [`"بازه زمانی"`, `"${startDate || "ابتدا"} تا ${endDate || "اکنون"}"`].join(",")
       );
-      csvRows.push([`"تاریخ خروجی"`, `"${stamp}"`].join(","));
+      csvRows.push([`"تاریخ خروجی (شمسی)"`, `"${stamp}"`].join(","));
       csvRows.push("");
 
       csvRows.push(
@@ -181,12 +184,12 @@ export async function GET(req: Request) {
         });
       });
 
-      const csvContent = "\uFEFF" + csvRows.join("\r\n");
+      const csvContent = "\uFEFFsep=,\r\n" + csvRows.join("\r\n");
       return new Response(csvContent, {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="financial_report_${stamp}.csv"`,
+          "Content-Disposition": `attachment; filename="financial_report_${stamp.replace(/\//g, "-")}.csv"`,
         },
       });
     }
@@ -202,6 +205,7 @@ export async function GET(req: Request) {
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>گزارش عملکرد مالی - آرنا والت</title>
   <style>
     @page { size: A4 portrait; margin: 10mm; }
@@ -214,6 +218,55 @@ export async function GET(req: Request) {
       padding: 16px;
       font-size: 11px;
       line-height: 1.5;
+    }
+    .action-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);
+    }
+    .action-bar-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .print-btn {
+      width: 100%;
+      padding: 12px 20px;
+      background: #0284c7;
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .print-btn:active { background: #0369a1; }
+    .ios-hint {
+      font-size: 10px;
+      color: #0369a1;
+      line-height: 1.5;
+      background: #e0f2fe;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    @media (min-width: 640px) {
+      .action-bar-inner {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .print-btn { width: auto; }
     }
     .header {
       display: flex;
@@ -285,36 +338,32 @@ export async function GET(req: Request) {
     }
     .fill-expense { background: #ef4444; }
     .fill-income { background: #22c55e; }
-    .print-btn {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      padding: 10px 18px;
-      background: #0284c7;
-      color: #fff;
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: bold;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
-    }
     @media print {
       body { padding: 0; }
-      .print-btn { display: none !important; }
+      .no-print { display: none !important; }
       table { page-break-inside: auto; }
       tr { page-break-inside: avoid; page-break-after: auto; }
     }
   </style>
 </head>
 <body>
+  <div class="no-print action-bar">
+    <div class="action-bar-inner">
+      <button class="print-btn" onclick="window.print()" ontouchend="window.print()">
+        🖨️ چاپ / ذخیره به عنوان PDF
+      </button>
+      <div class="ios-hint">
+        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه چاپ، در پیش‌نمایش پرینت با دو انگشت روی برگه زوم کنید (Pinch-Out) تا فایل PDF شود، سپس دکمه اشتراک <b>Share</b> را زده و <b>Save to Files</b> را انتخاب فرمایید.
+      </div>
+    </div>
+  </div>
+
   <div class="header">
     <div>
       <h1 class="title">گزارش تحلیلی عملکرد مالی</h1>
       <div class="meta">
         بازه گزارش: ${startDate || "ابتدا"} تا ${endDate || "اکنون"}
-        | تاریخ استخراج: ${stamp}
+        | تاریخ استخراج: ${stampText} (${stamp})
       </div>
     </div>
   </div>
@@ -420,13 +469,15 @@ export async function GET(req: Request) {
     </tbody>
   </table>
 
-  <button class="print-btn" onclick="window.print()">🖨️ چاپ / ذخیره به عنوان PDF</button>
-
   <script>
+    // اجرای هوشمند پرینت در دسکتاپ پس از بارگذاری
     window.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        window.print();
-      }, 400);
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (!isMobile) {
+        setTimeout(() => {
+          window.print();
+        }, 400);
+      }
     });
   </script>
 </body>
