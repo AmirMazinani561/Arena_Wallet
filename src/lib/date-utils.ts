@@ -44,14 +44,19 @@ export function getCurrentShamsi(): { jy: number; jm: number; jd: number; format
   };
 }
 
-export function shamsiToGregorian(shamsiStr: string): Date {
+export function shamsiToGregorian(
+  shamsiStr: string,
+  hour = 12,
+  minute = 0,
+  second = 0
+): Date {
   const parts = shamsiStr.split("/").map((p) => parseInt(p.trim(), 10));
   if (parts.length !== 3 || parts.some(isNaN)) {
     return new Date();
   }
   const [jy, jm, jd] = parts;
   const g = jalaali.toGregorian(jy, jm, jd);
-  return new Date(Date.UTC(g.gy, g.gm - 1, g.gd, 12, 0, 0));
+  return new Date(Date.UTC(g.gy, g.gm - 1, g.gd, hour, minute, second));
 }
 
 export function formatMoney(amount: number): string {

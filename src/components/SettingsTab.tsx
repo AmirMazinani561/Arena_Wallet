@@ -17,14 +17,17 @@ import { BackupModal } from "./BackupModal";
 import { LoginModal } from "./LoginModal";
 import { APP_VERSION } from "@/lib/version";
 import { SnapshotsPanel } from "./SnapshotsPanel";
+import { SmsPatternTrainer } from "./SmsPatternTrainer";
+import { Account } from "@/types";
 
 interface Props {
   user: { id: string; username: string; fullName?: string | null } | null;
   onLogout: () => void;
   onRefreshAllData: () => void;
+  accounts?: Account[];
 }
 
-export function SettingsTab({ user, onLogout, onRefreshAllData }: Props) {
+export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }: Props) {
   const [isBackupOpen, setIsBackupOpen] = useState(false);
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
   const [showAccountingHelp, setShowAccountingHelp] = useState(false);
@@ -135,6 +138,9 @@ export function SettingsTab({ user, onLogout, onRefreshAllData }: Props) {
           </button>
         </div>
       </div>
+
+      {/* بخش آموزش هوشمند الگوی پیامک بانکی */}
+      <SmsPatternTrainer accounts={accounts} />
 
       {/* بک‌آپ خودکار */}
       <SnapshotsPanel onRestored={onRefreshAllData} />
