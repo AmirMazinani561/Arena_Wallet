@@ -178,24 +178,24 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         </div>
       </div>
 
-      {/* جستجو + فیلتر تاریخ + خروجی اکسل و چاپ/PDF */}
-      <div className="flex gap-2 items-center flex-wrap">
-        <div className="relative flex-1 min-w-[170px]">
+      {/* جستجو + فیلتر تاریخ + خروجی اکسل و چاپ/PDF در یک سطر هماهنگ */}
+      <div className="flex gap-1.5 items-center flex-nowrap">
+        <div className="relative flex-1 min-w-0">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="جستجو در شرح، مبلغ، طرف حساب…"
+            placeholder="جستجو در گردش حساب…"
             onKeyDown={blurOnEnter}
             enterKeyHint="search"
-            className="w-full pr-9 pl-8 py-2.5 text-xs bg-white border border-sky-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-sm"
+            className="w-full pr-8 pl-7 py-2 text-xs bg-white border border-sky-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-sm"
           />
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5" />
           {search && (
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="absolute left-3 top-3 text-slate-400 hover:text-slate-600"
+              className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-600"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -204,7 +204,7 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={() => setDateFilterOn(!dateFilterOn)}
-          className={`px-3 py-2.5 rounded-2xl text-xs font-semibold transition flex items-center gap-1 shrink-0 ${
+          className={`px-2.5 h-8 rounded-xl text-xs font-semibold transition flex items-center gap-1 shrink-0 ${
             dateFilterOn
               ? "bg-amber-500 text-white shadow-sm"
               : "bg-white text-slate-600 border border-sky-100 shadow-sm"
@@ -216,7 +216,7 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={handleExportCsv}
-          className="px-2.5 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-2xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm whitespace-nowrap"
+          className="w-10 h-8 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm"
           title="خروجی اکسل این صورت‌حساب"
         >
           <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black tracking-wider">EX</span>
@@ -224,7 +224,7 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={handlePrintPdf}
-          className="px-2.5 py-2 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-2xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm whitespace-nowrap"
+          className="w-10 h-8 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm"
           title="چاپ یا ذخیره به عنوان PDF"
         >
           <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black tracking-wider">PDF</span>

@@ -142,7 +142,7 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
           <button
             type="button"
             onClick={handleExportCsv}
-            className="px-2 py-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center transition shadow-sm whitespace-nowrap"
+            className="w-10 h-8 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm"
             title="خروجی اکسل گزارش تحلیلی این بازه"
           >
             <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black tracking-wider">EX</span>
@@ -150,7 +150,7 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
           <button
             type="button"
             onClick={handlePrintPdf}
-            className="px-2 py-1.5 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-xl text-xs font-bold flex items-center justify-center transition shadow-sm whitespace-nowrap"
+            className="w-10 h-8 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm"
             title="چاپ یا ذخیره به عنوان PDF گزارش تحلیلی"
           >
             <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black tracking-wider">PDF</span>
