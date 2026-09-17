@@ -339,12 +339,15 @@ export async function GET(req: Request) {
       white-space: nowrap;
     }
     td {
-      padding: 8px 6px;
+      padding: 8px 5px;
       border: 1px solid #e2e8f0;
       color: #334155;
       text-align: center;
       vertical-align: middle;
-      word-break: break-word;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+      line-height: 1.4;
     }
     tr:nth-child(even) td { background: #fafafa; }
     .text-center { text-align: center; }
@@ -397,16 +400,16 @@ export async function GET(req: Request) {
 
     <div class="stats">
       <div class="stat-card">
-        <div class="stat-label">مانده ابتدای دوره</div>
-        <div class="stat-val val-neutral">${formatNum(result.openingBalance)} ریال</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-label">${isAsset ? "مجموع واریزها (بدهکار)" : "گردش ورودی"}</div>
         <div class="stat-val val-in">${formatNum(totalIn)} ریال</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">${isAsset ? "مجموع برداشت‌ها (بستانکار)" : "گردش خروجی"}</div>
         <div class="stat-val val-out">${formatNum(totalOut)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">مانده ابتدای دوره</div>
+        <div class="stat-val val-neutral">${formatNum(result.openingBalance)} ریال</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">مانده پایانی انتهای دوره</div>
@@ -419,9 +422,9 @@ export async function GET(req: Request) {
         <thead>
           <tr>
             <th style="width: 22%;">تاریخ / طرفین</th>
-            <th style="width: 40%;">شرح تراکنش</th>
-            <th style="width: 19%;">مبلغ (ریال)</th>
-            <th style="width: 19%;">مانده (ریال)</th>
+            <th style="width: 32%;">شرح تراکنش</th>
+            <th style="width: 23%;">مبلغ (ریال)</th>
+            <th style="width: 23%;">مانده (ریال)</th>
           </tr>
         </thead>
         <tbody>
@@ -450,10 +453,10 @@ export async function GET(req: Request) {
                   <div style="color: #1e293b; line-height: 1.4;">${r.description || "-"}</div>
                   ${r.fee ? `<div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">کارمزد: ${formatNum(r.fee)} ریال</div>` : ""}
                 </td>
-                <td class="text-center nowrap" style="color: ${amountColor}; font-weight: 700; font-size: 11.5px;">
+                <td class="text-center" style="color: ${amountColor}; font-weight: 700; font-size: 11px;">
                   ${formatNum(r.amount)}
                 </td>
-                <td class="text-center nowrap" style="font-weight: 700; color: #0f172a; background: #f8fafc; font-size: 11.5px;">
+                <td class="text-center" style="font-weight: 700; color: #0f172a; background: #f8fafc; font-size: 11px;">
                   ${formatNum(r.balanceAfter)}
                 </td>
               </tr>`;
