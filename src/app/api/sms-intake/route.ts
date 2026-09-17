@@ -57,16 +57,103 @@ function plain(message: string, status = 200): NextResponse {
   });
 }
 
-/** استخراج ۴ رقم آخر همه توکن‌های عددی «اطلاعات تکمیلی» و «نام» یک حساب */
-function accountLast4s(acc: AccountRow): Set<string> {
-  const out = new Set<string>();
+export interface AccountCredentials {
+  /** شماره کارت‌های ۱۶ رقمی کاربر (فقط ارقام خالص) */
+  fullCards: string[];
+  /** پیش‌شماره ۶ رقمی کارت‌ها (BIN) */
+  cardPrefix6s: string[];
+  /** شماره حساب‌های کامل کاربر (فقط ارقام خالص، طول >= 5) */
+  fullAccounts: string[];
+  /** شماره حساب بدون پسوند اعشاری/نقطه‌ای (هسته حساب پاسارگاد/سامان) */
+  coreAccounts: string[];
+  /** شماره‌های شبای ۲۴ رقمی */
+  fullIbans: string[];
+  /** ۴ رقم‌های آخر همه کارت‌ها و حساب‌ها */
+  last4s: string[];
+}
+
+/** استخراج شناسنامه کامل تمام ارقام کارت، حساب و شبای یک حساب */
+function extractAccountCredentials(acc: AccountRow): AccountCredentials {
+  const fullCards: string[] = [];
+  const cardPrefix6s: string[] = [];
+  const fullAccounts: string[] = [];
+  const coreAccounts: string[] = [];
+  const fullIbans: string[] = [];
+  const last4s = new Set<string>();
+
   const combined = `${acc.name} ${acc.detailInfo || ""}`;
   const norm = normalizeSmsText(combined);
+
+  // ۱) استخراج شماره کارت‌های ۱۶ رقمی (با یا بدون جداکننده)
+  for (const m of norm.matchAll(/(?:^|[^\d])(\d{4}[-\s.]\d{4}[-\s.]\d{4}[-\s.]\d{4})(?=[^\d]|$)/g)) {
+    const clean = m[1].replace(/\D/g, "");
+    if (clean.length === 16 && !fullCards.includes(clean)) {
+      fullCards.push(clean);
+      cardPrefix6s.push(clean.slice(0, 6));
+      last4s.add(clean.slice(-4));
+    }
+  }
+  for (const m of norm.matchAll(/(?:^|\D)(\d{16})(?=\D|$)/g)) {
+    const clean = m[1];
+    if (!fullCards.includes(clean)) {
+      fullCards.push(clean);
+      cardPrefix6s.push(clean.slice(0, 6));
+      last4s.add(clean.slice(-4));
+    }
+  }
+
+  // ۲) استخراج شبا (IR...)
+  for (const m of norm.matchAll(/IR\s*([0-9]{24})/gi)) {
+    const clean = m[1];
+    if (!fullIbans.includes(clean)) {
+      fullIbans.push(clean);
+      last4s.add(clean.slice(-4));
+    }
+  }
+
+  // ۳) استخراج شماره حساب‌های نقطه‌دار یا خط‌تیره‌دار (پاسارگاد و سامان)
+  for (const m of norm.matchAll(/(?:^|[\s;_])([0-9][0-9.\-]{4,})(?=[\s;_]|$)/g)) {
+    const rawTok = m[1];
+    const clean = rawTok.replace(/\D/g, "");
+    if (clean.length >= 6 && clean.length <= 18 && !fullCards.includes(clean)) {
+      if (!fullAccounts.includes(clean)) fullAccounts.push(clean);
+      last4s.add(clean.slice(-4));
+      const stripped = rawTok.replace(/[\.\-]\d+$/, "");
+      const strippedClean = stripped.replace(/\D/g, "");
+      if (strippedClean !== clean && strippedClean.length >= 6) {
+        if (!coreAccounts.includes(strippedClean)) coreAccounts.push(strippedClean);
+      }
+    }
+  }
+
+  // ۴) استخراج شماره حساب‌های ساده (۵ تا ۱۸ رقم)
+  for (const m of norm.matchAll(/(?:^|\D)([0-9]{5,18})(?=\D|$)/g)) {
+    const clean = m[1];
+    if (!fullCards.includes(clean) && !fullIbans.includes(clean)) {
+      if (!fullAccounts.includes(clean)) fullAccounts.push(clean);
+      last4s.add(clean.slice(-4));
+    }
+  }
+
+  // ۵) استخراج ۴ رقم‌های پایانی از هر توکن عددی ۳ رقمی یا بیشتر
   for (const m of norm.matchAll(/[0-9][0-9.\-*]{3,}/g)) {
     const l4 = tokenLast4(m[0]);
-    if (l4.length === 4) out.add(l4);
+    if (l4.length === 4) last4s.add(l4);
   }
-  return out;
+
+  return {
+    fullCards,
+    cardPrefix6s,
+    fullAccounts,
+    coreAccounts,
+    fullIbans,
+    last4s: Array.from(last4s),
+  };
+}
+
+/** استخراج ۴ رقم‌های پایانی یک حساب جهت سازگاری کامل */
+function accountLast4s(acc: AccountRow): string[] {
+  return extractAccountCredentials(acc).last4s;
 }
 
 export async function GET() {
@@ -220,68 +307,152 @@ export async function POST(req: Request) {
       const reasons: string[] = [];
       let candidateMatchedKind: "deposit" | "withdrawal" | undefined;
 
-      const accLast4 = accountLast4s(acc);
+      const cred = extractAccountCredentials(acc);
       const accCombined = `${acc.name} ${acc.detailInfo || ""}`;
 
-      // ۱) تطبیق ۴ رقم کارت/حساب کاربر با توکن‌های رسمی پیامک (حذف قطعی جستجوی رشته‌ای در متن خام)
-      let cardMatched = false;
-      for (const l4 of accLast4) {
-        if (likelyWithdrawal) {
-          if (fromLast4.has(l4) || generalLast4.has(l4)) {
-            score += 120;
-            reasons.push("کارت/حساب مبدأ");
-            cardMatched = true;
+      // =========================================================================
+      // سطح ۱: انطباق قطعی تمام ارقام (Full-Digits 100% Match)
+      // =========================================================================
+
+      // ۱-الف) انطباق تمام ۱۶ رقم شماره کارت
+      for (const fullCard of parsed.fullCardNumbers) {
+        if (cred.fullCards.includes(fullCard)) {
+          const isFrom = parsed.fromSideTokens.some((t) => t.replace(/\D/g, "").includes(fullCard));
+          const isTo = parsed.toSideTokens.some((t) => t.replace(/\D/g, "").includes(fullCard));
+
+          if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
+            score += 260;
+            reasons.push(`انطباق کامل ۱۶ رقم کارت مبدأ (${fullCard.slice(-4)})`);
             break;
-          } else if (toLast4.has(l4)) {
-            score += 25;
-            reasons.push("کارت مقصد");
-            cardMatched = true;
+          } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
+            score += 260;
+            reasons.push(`انطباق کامل ۱۶ رقم کارت مقصد (${fullCard.slice(-4)})`);
             break;
-          }
-        } else if (likelyDeposit) {
-          if (toLast4.has(l4) || generalLast4.has(l4)) {
-            score += 120;
-            reasons.push("کارت/حساب مقصد");
-            cardMatched = true;
-            break;
-          } else if (fromLast4.has(l4)) {
-            score += 25;
-            reasons.push("کارت مبدأ");
-            cardMatched = true;
-            break;
-          }
-        } else {
-          if (allSmsLast4.has(l4)) {
-            score += 100;
-            reasons.push("شماره کارت/حساب");
-            cardMatched = true;
+          } else if (likelyWithdrawal && isTo) {
+            score += 30;
+            reasons.push(`کارت مقصد تراکنش (${fullCard.slice(-4)})`);
+          } else {
+            score += 240;
+            reasons.push(`انطباق کامل ۱۶ رقم کارت (${fullCard.slice(-4)})`);
             break;
           }
         }
       }
 
-      // ۲) تطبیق با الگوهای آموزش‌داده‌شده این حساب
+      // ۱-ب) انطباق تمام ارقام شماره حساب یا شبا
+      if (score < 200) {
+        for (const accTok of parsed.accountTokens) {
+          const isFrom = accTok.side === "from";
+          const isTo = accTok.side === "to";
+          const pure = accTok.pureDigits;
+
+          if (cred.fullAccounts.includes(pure) || cred.coreAccounts.includes(pure) || cred.fullIbans.includes(pure)) {
+            if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
+              score += 250;
+              reasons.push(`انطباق کامل شماره حساب مبدأ (${pure.slice(-4)})`);
+              break;
+            } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
+              score += 250;
+              reasons.push(`انطباق کامل شماره حساب مقصد (${pure.slice(-4)})`);
+              break;
+            } else if (likelyWithdrawal && isTo) {
+              score += 30;
+              reasons.push(`حساب مقصد تراکنش (${pure.slice(-4)})`);
+            } else {
+              score += 230;
+              reasons.push(`انطباق کامل شماره حساب (${pure.slice(-4)})`);
+              break;
+            }
+          }
+        }
+      }
+
+      // =========================================================================
+      // سطح ۲: انطباق ارقام دوطرفه کارت‌های ماسک‌شده (۶ رقم اول + ۴ رقم آخر)
+      // =========================================================================
+      if (score < 200) {
+        for (const masked of parsed.maskedCardTokens) {
+          if (masked.prefix && masked.suffix && masked.prefix.length >= 4) {
+            const matchedCard = cred.fullCards.find(
+              (c) => c.startsWith(masked.prefix) && c.endsWith(masked.suffix)
+            );
+            if (matchedCard) {
+              const isFrom = masked.side === "from";
+              const isTo = masked.side === "to";
+              if (likelyWithdrawal && (isFrom || (!isFrom && !isTo))) {
+                score += 210;
+                reasons.push(`انطباق ارقام اول و آخر کارت (${masked.prefix}...${masked.suffix})`);
+                break;
+              } else if (likelyDeposit && (isTo || (!isFrom && !isTo))) {
+                score += 210;
+                reasons.push(`انطباق ارقام اول و آخر کارت (${masked.prefix}...${masked.suffix})`);
+                break;
+              } else {
+                score += 190;
+                reasons.push(`انطباق ارقام اول و آخر کارت (${masked.prefix}...${masked.suffix})`);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // =========================================================================
+      // سطح ۳: فالبک ۴ رقم آخر کارت/حساب (صرفاً در نبود انطباق کامل)
+      // =========================================================================
+      if (score < 180) {
+        for (const l4 of cred.last4s) {
+          if (likelyWithdrawal) {
+            if (fromLast4.has(l4) || generalLast4.has(l4)) {
+              score += 110;
+              reasons.push(`۴ رقم کارت/حساب مبدأ (${l4})`);
+              break;
+            } else if (toLast4.has(l4)) {
+              score += 25;
+              reasons.push(`۴ رقم کارت مقصد (${l4})`);
+              break;
+            }
+          } else if (likelyDeposit) {
+            if (toLast4.has(l4) || generalLast4.has(l4)) {
+              score += 110;
+              reasons.push(`۴ رقم کارت/حساب مقصد (${l4})`);
+              break;
+            } else if (fromLast4.has(l4)) {
+              score += 25;
+              reasons.push(`۴ رقم کارت مبدأ (${l4})`);
+              break;
+            }
+          } else {
+            if (allSmsLast4.has(l4)) {
+              score += 90;
+              reasons.push(`۴ رقم کارت/حساب (${l4})`);
+              break;
+            }
+          }
+        }
+      }
+
+      // =========================================================================
+      // سطح ۴: تطبیق الگوهای آموزش‌داده‌شده این حساب
+      // =========================================================================
       const accPatterns = trainedPatterns.filter((p) => p.accountId === acc.id);
       let bestPatScore = 0;
       for (const pat of accPatterns) {
         let pScore = 0;
-        // تطبیق کارت الگو فقط در صورتی که در توکن‌های معتبر کارت وجود داشته باشد
         if (pat.cardLast4) {
           if (likelyWithdrawal && (fromLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
-            pScore += 120;
+            pScore += 110;
           } else if (likelyDeposit && (toLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
-            pScore += 120;
+            pScore += 110;
           } else if (allSmsLast4.has(pat.cardLast4)) {
-            pScore += 100;
+            pScore += 90;
           }
         }
 
-        // تطبیق نام بانک الگو
         if (pat.bankName && parsed.bankHint && (pat.bankName.includes(parsed.bankHint) || parsed.bankHint.includes(pat.bankName))) {
           pScore += 30;
         }
 
-        // تطبیق کلیدواژه‌های اختصاصی الگو
         if (pat.keywords) {
           try {
             const kws: string[] = JSON.parse(pat.keywords);
@@ -305,12 +476,14 @@ export async function POST(req: Request) {
         }
       }
 
-      if (bestPatScore > 0) {
+      if (bestPatScore > 0 && score < 150) {
         score += bestPatScore;
         reasons.push("الگوی آموزش‌داده‌شده");
       }
 
-      // ۳) تطبیق نام بانک و اعمال جریمه تضاد بانکی
+      // =========================================================================
+      // سطح ۵: تطبیق نام بانک و اعمال جریمه تضاد بانکی
+      // =========================================================================
       if (parsed.bankHint) {
         const matchesThisBank =
           accCombined.includes(parsed.bankHint) ||
@@ -322,7 +495,7 @@ export async function POST(req: Request) {
           score += 60;
           reasons.push(`نام بانک (${parsed.bankHint})`);
         } else {
-          // اگر پیامک قطعاً متعلق به یک بانک دیگر است، این حساب جریمه سنگین می‌گیرد
+          // اگر پیامک صراحتاً متعلق به یک بانک دیگر است، این حساب جریمه سنگین می‌گیرد
           const conflictingBank = KNOWN_BANKS.find(
             (b) => b.canonical !== parsed.bankHint && accCombined.includes(b.canonical)
           );
@@ -332,7 +505,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // ۴) تطبیق نام صریح حساب در متن پیامک
+      // تطبیق نام صریح حساب در متن پیامک
       if (acc.name.length >= 3 && rawText.includes(acc.name)) {
         score += 35;
         reasons.push("نام حساب در متن");
@@ -356,16 +529,28 @@ export async function POST(req: Request) {
     let patternMatchedKind: "deposit" | "withdrawal" | null = null;
     let needsAccountReview = false;
 
-    if (bestCandidate && bestCandidate.score >= 80) {
-      // تطابق قوی و مطمئن (شماره کارت یا الگو + بانک)
+    if (bestCandidate && bestCandidate.score >= 180) {
+      // تطابق ۱۰۰٪ قطعی تمام ارقام کارت، شماره حساب یا ۶ رقم اول + ۴ رقم آخر
       matched = bestCandidate.account;
-      matchedVia = bestCandidate.reasons.join(" + ") || "تطبیق الگو";
+      matchedVia = bestCandidate.reasons.join(" + ");
       patternMatchedKind = bestCandidate.matchedKind || null;
+    } else if (bestCandidate && bestCandidate.score >= 80) {
+      // تطابق قوی ۴ رقم آخر یا الگو + نام بانک
+      if (!runnerUpCandidate || bestCandidate.score - runnerUpCandidate.score >= 20) {
+        matched = bestCandidate.account;
+        matchedVia = bestCandidate.reasons.join(" + ");
+        patternMatchedKind = bestCandidate.matchedKind || null;
+      } else {
+        // دو یا چند حساب با امتیاز نزدیک در یک بانک (نیاز به بازبینی توسط کاربر)
+        matched = bestCandidate.account;
+        matchedVia = `چندین حساب مرتبط با ${parsed.bankHint || "پیامک"}`;
+        needsAccountReview = true;
+      }
     } else if (bestCandidate && bestCandidate.score >= 50) {
       // تطابق با نام بانک یا امتیاز متوسط
       if (!runnerUpCandidate || bestCandidate.score - runnerUpCandidate.score >= 20) {
         matched = bestCandidate.account;
-        matchedVia = bestCandidate.reasons.join(" + ") || "نام بانک";
+        matchedVia = bestCandidate.reasons.join(" + ");
         patternMatchedKind = bestCandidate.matchedKind || null;
       } else {
         // دو یا چند حساب با امتیاز نزدیک در یک بانک (نیاز به بازبینی توسط کاربر)
@@ -407,9 +592,13 @@ export async function POST(req: Request) {
     }
 
     if (kind === "unknown" && matched) {
-      const matchedLast4 = [...accountLast4s(matched)];
-      const inFrom = parsed.fromSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
-      const inTo = parsed.toSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
+      const matchedCred = extractAccountCredentials(matched);
+      const inFrom =
+        parsed.fromSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
+      const inTo =
+        parsed.toSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
       if (inTo && !inFrom) kind = "deposit";
       else if (inFrom && !inTo) kind = "withdrawal";
     }
