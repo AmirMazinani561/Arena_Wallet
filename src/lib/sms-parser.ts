@@ -151,6 +151,12 @@ function toNumber(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function makeTehranDate(gy: number, gm: number, gd: number, hour: number, minute: number): Date {
+  const tehranOffsetMs = (3 * 60 + 30) * 60 * 1000;
+  const epoch = Date.UTC(gy, gm - 1, gd, hour, minute, 0) - tehranOffsetMs;
+  return new Date(epoch);
+}
+
 /** نوع صریح تراکنش که کاربر در شورتکات انتخاب می‌کند */
 export type ExplicitKind = "deposit" | "withdrawal" | "fee";
 
@@ -277,10 +283,11 @@ export function parseBankSms(raw: string): ParsedSms {
         gmo = g.gm;
         gd = g.gd;
       }
+
       // ساعت پیامک به وقت تهران (UTC+3:30) تفسیر می‌شود
       date = hasExplicitTime
-        ? new Date(Date.UTC(gy, gmo - 1, gd, hour - 3, minute - 30))
-        : new Date(Date.UTC(gy, gmo - 1, gd, 12, 0));
+        ? makeTehranDate(gy, gmo, gd, hour, minute)
+        : new Date(Date.UTC(gy, gmo - 1, gd, 12, 0, 0));
       hasExplicitDate = true;
       mark(dm);
     }
@@ -318,8 +325,8 @@ export function parseBankSms(raw: string): ParsedSms {
         }
         date =
           hh >= 0
-            ? new Date(Date.UTC(g.gy, g.gm - 1, g.gd, hh - 3, mi2 - 30))
-            : new Date(Date.UTC(g.gy, g.gm - 1, g.gd, 12, 0));
+            ? makeTehranDate(g.gy, g.gm, g.gd, hh, mi2)
+            : new Date(Date.UTC(g.gy, g.gm - 1, g.gd, 12, 0, 0));
         hasExplicitDate = true;
         mark(mm);
       }
@@ -329,7 +336,7 @@ export function parseBankSms(raw: string): ParsedSms {
   if (!hasExplicitDate && hasExplicitTime) {
     // فقط ساعت ذکر شده — تاریخ امروز در نظر گرفته می‌شود
     const now = new Date();
-    date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour - 3, minute - 30));
+    date = makeTehranDate(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(), hour, minute);
   }
 
   /* ---------- ۳) کد پیگیری ---------- */

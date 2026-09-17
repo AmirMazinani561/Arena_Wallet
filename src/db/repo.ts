@@ -57,6 +57,18 @@ export interface TransactionRow {
   sourceHash: string | null;
 }
 
+export interface SmsPatternRow {
+  id: string;
+  accountId: string;
+  kind: "deposit" | "withdrawal";
+  sampleText: string;
+  bankName: string | null;
+  cardLast4: string | null;
+  keywords: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /* ------------------------------------------------------------------ */
 /*  ساخت خودکار جداول و ایندکس‌ها                                       */
 /* ------------------------------------------------------------------ */
@@ -110,6 +122,18 @@ const DDL_MYSQL = [
      transaction_count int NOT NULL DEFAULT 0,
      payload longtext NOT NULL
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  `CREATE TABLE IF NOT EXISTS sms_patterns (
+     id varchar(64) NOT NULL PRIMARY KEY,
+     account_id varchar(64) NOT NULL,
+     kind varchar(20) NOT NULL,
+     sample_text text NOT NULL,
+     bank_name varchar(191) NULL,
+     card_last4 varchar(16) NULL,
+     keywords text NULL,
+     created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
 const DDL_POSTGRES = [
@@ -161,6 +185,18 @@ const DDL_POSTGRES = [
      transaction_count integer NOT NULL DEFAULT 0,
      payload text NOT NULL
    )`,
+
+  `CREATE TABLE IF NOT EXISTS sms_patterns (
+     id varchar(64) PRIMARY KEY,
+     account_id varchar(64) NOT NULL,
+     kind varchar(20) NOT NULL,
+     sample_text text NOT NULL,
+     bank_name varchar(191),
+     card_last4 varchar(16),
+     keywords text,
+     created_at timestamp NOT NULL DEFAULT now(),
+     updated_at timestamp NOT NULL DEFAULT now()
+   )`,
 ];
 
 /**
@@ -182,6 +218,7 @@ const INDEXES: { name: string; table: string; columns: string }[] = [
   { name: "idx_acc_parent", table: "accounts", columns: "parent_id" },
   { name: "idx_acc_fav", table: "accounts", columns: "is_favorite" },
   { name: "idx_acc_sort_order", table: "accounts", columns: "sort_order" },
+  { name: "idx_sms_patterns_acc", table: "sms_patterns", columns: "account_id" },
 ];
 
 async function ensureIndexes() {
@@ -270,6 +307,14 @@ export function ensureDatabase(): Promise<void> {
         if (snapshotDdl) {
           try {
             await execute(snapshotDdl);
+          } catch {
+            /* نادیده گرفته می‌شود */
+          }
+        }
+        const patternDdl = statements.find((s) => s.includes("sms_patterns"));
+        if (patternDdl) {
+          try {
+            await execute(patternDdl);
           } catch {
             /* نادیده گرفته می‌شود */
           }
@@ -1356,3 +1401,67 @@ export async function replaceAll(
     }
   });
 }
+
+/* ------------------------------------------------------------------ */
+/*  الگوهای آموزش‌داده‌شده پیامک‌های بانکی                               */
+/* ------------------------------------------------------------------ */
+
+export async function listSmsPatterns(): Promise<SmsPatternRow[]> {
+  const rows = await query(
+    `SELECT * FROM sms_patterns ORDER BY created_at DESC`
+  );
+  return rows.map((r) => ({
+    id: String(r.id),
+    accountId: String(r.account_id),
+    kind: (String(r.kind) === "deposit" ? "deposit" : "withdrawal") as "deposit" | "withdrawal",
+    sampleText: String(r.sample_text),
+    bankName: r.bank_name ? String(r.bank_name) : null,
+    cardLast4: r.card_last4 ? String(r.card_last4) : null,
+    keywords: r.keywords ? String(r.keywords) : null,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    updatedAt: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at),
+  }));
+}
+
+export async function createSmsPattern(data: {
+  accountId: string;
+  kind: "deposit" | "withdrawal";
+  sampleText: string;
+  bankName?: string | null;
+  cardLast4?: string | null;
+  keywords?: string | null;
+}): Promise<SmsPatternRow> {
+  const id = `pat_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+  const now = new Date();
+  await execute(
+    `INSERT INTO sms_patterns (id, account_id, kind, sample_text, bank_name, card_last4, keywords, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      data.accountId,
+      data.kind,
+      data.sampleText,
+      data.bankName || null,
+      data.cardLast4 || null,
+      data.keywords || null,
+      now,
+      now,
+    ]
+  );
+  return {
+    id,
+    accountId: data.accountId,
+    kind: data.kind,
+    sampleText: data.sampleText,
+    bankName: data.bankName || null,
+    cardLast4: data.cardLast4 || null,
+    keywords: data.keywords || null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+}
+
+export async function deleteSmsPattern(id: string): Promise<void> {
+  await execute(`DELETE FROM sms_patterns WHERE id = ?`, [id]);
+}
+

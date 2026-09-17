@@ -4,6 +4,7 @@ import { translateDbError } from "@/db/client";
 import {
   ensureDatabase,
   listAccounts,
+  listSmsPatterns,
   createTransaction,
   findRecentDuplicateByHash,
   AccountRow,
@@ -165,16 +166,56 @@ export async function POST(req: Request) {
       }
     }
 
+    /* ---------- تطبیق با الگوهای آموزش‌داده‌شده ---------- */
     let matched: AccountRow | null = null;
     let matchedVia = "";
-    for (const acc of assetAccounts) {
-      const accLast4 = accountLast4s(acc);
-      if ([...accLast4].some((x) => smsLast4.has(x))) {
+    let patternMatchedKind: "deposit" | "withdrawal" | null = null;
+
+    const trainedPatterns = await listSmsPatterns();
+    for (const pat of trainedPatterns) {
+      const acc = assetAccounts.find((a) => a.id === pat.accountId);
+      if (!acc) continue;
+
+      let score = 0;
+      if (pat.cardLast4 && (smsLast4.has(pat.cardLast4) || rawText.includes(pat.cardLast4))) {
+        score += 80;
+      }
+      if (pat.bankName && (rawText.includes(pat.bankName) || acc.name.includes(pat.bankName))) {
+        score += 25;
+      }
+      if (pat.keywords) {
+        try {
+          const kws: string[] = JSON.parse(pat.keywords);
+          let matchCount = 0;
+          for (const kw of kws) {
+            if (rawText.includes(kw)) matchCount++;
+          }
+          if (kws.length > 0) {
+            score += Math.round((matchCount / kws.length) * 45);
+          }
+        } catch {}
+      }
+
+      if (score >= 45) {
         matched = acc;
-        matchedVia = "شماره کارت/حساب";
+        matchedVia = "الگوی آموزش‌داده‌شده";
+        patternMatchedKind = pat.kind;
         break;
       }
     }
+
+    /* ---------- تطبیق معمولی حساب در صورت عدم مچ با الگو ---------- */
+    if (!matched) {
+      for (const acc of assetAccounts) {
+        const accLast4 = accountLast4s(acc);
+        if ([...accLast4].some((x) => smsLast4.has(x))) {
+          matched = acc;
+          matchedVia = "شماره کارت/حساب";
+          break;
+        }
+      }
+    }
+
     if (!matched && parsed.bankHint) {
       const byName = assetAccounts.filter(
         (a) => a.name.includes(parsed.bankHint as string) || (a.detailInfo || "").includes(parsed.bankHint as string)
@@ -183,33 +224,43 @@ export async function POST(req: Request) {
         matched = byName[0];
         matchedVia = "نام بانک";
       } else if (byName.length > 1) {
-        const message = `⚠️ چند حساب «${parsed.bankHint}» دارید؛ مشخص نیست این تراکنش متعلق به کدام است.`;
+        matched = byName[0];
+        matchedVia = `چندین حساب ${parsed.bankHint}`;
+      }
+    }
+
+    let needsAccountReview = false;
+    if (!matched) {
+      if (assetAccounts.length > 0) {
+        matched = assetAccounts[0];
+        matchedVia = "پیش‌فرض خودکار (عدم شناسایی بانک)";
+        needsAccountReview = true;
+      } else {
+        const message = "⚠️ هیچ حساب بانکی فعالی در سیستم وجود ندارد. لطفاً ابتدا در تنظیمات یک حساب بانکی ایجاد کنید.";
         return asText ? plain(message) : NextResponse.json({ ok: true, created: false, needsAccount: true, message });
       }
     }
-    if (!matched) {
-      const message =
-        "⚠️ پیامک پارس شد اما حساب بانکی متناظری پیدا نشد. شماره کارت/حساب را در «اطلاعات تکمیلی» آن حساب ذخیره کنید تا تشخیص خودکار فعال شود.";
-      return asText ? plain(message) : NextResponse.json({ ok: true, created: false, needsAccount: true, message });
-    }
 
     /* ---------- جهت تراکنش ----------
-     * ترتیب اولویت: توکن سمت «از/به» > نوع پارس‌شده از کلیدواژه‌ها
+     * ترتیب اولویت: نوع صریح شورتکات > الگوی آموزش‌داده‌شده > توکن‌های سمت > پارسر پیامک > هوش کلیدواژه‌ای
      */
-    const matchedLast4 = [...accountLast4s(matched)];
-    const inFrom = parsed.fromSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
-    const inTo = parsed.toSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
-
-    let kind = parsed.kind;
-    if (kind !== "fee") {
+    let kind = patternMatchedKind || parsed.kind;
+    if (!patternMatchedKind && kind !== "fee") {
+      const matchedLast4 = [...accountLast4s(matched)];
+      const inFrom = parsed.fromSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
+      const inTo = parsed.toSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
       if (inTo && !inFrom) kind = "deposit";
       else if (inFrom && !inTo) kind = "withdrawal";
     }
-    // نوع انتخاب‌شده توسط کاربر در شورتکات بر همه‌چیز (پارسر و حدس جهت) مقدم است
+
     if (explicitKind) kind = explicitKind;
+
     if (kind === "unknown") {
-      const message = "⚠️ مبلغ و حساب شناسایی شد اما نوع تراکنش (واریز/برداشت) از متن پیامک مشخص نیست.";
-      return asText ? plain(message) : NextResponse.json({ ok: true, created: false, message });
+      if (parsed.amountSign === "+") kind = "deposit";
+      else if (parsed.amountSign === "-") kind = "withdrawal";
+      else if (/(?:واریز|افزایش|بستانکار|سود|حقوق)/.test(rawText)) kind = "deposit";
+      else if (/(?:برداشت|کاهش|بدهکار|خرید|پایا|ساتنا|انتقال|کارمزد)/.test(rawText)) kind = "withdrawal";
+      else kind = "withdrawal";
     }
 
     /* ---------- ساخت تراکنش ----------
@@ -242,7 +293,10 @@ export async function POST(req: Request) {
     const fromName = accounts.find((a) => a.id === fromId)?.name || "";
     const toName = accounts.find((a) => a.id === toId)?.name || "";
     const trimmedDesc = customDescription.trim().slice(0, 500);
-    const finalDescription = trimmedDesc || rawText;
+    let finalDescription = trimmedDesc || rawText;
+    if (needsAccountReview && !finalDescription.includes("[بررسی حساب بانک]")) {
+      finalDescription = `[بررسی حساب بانک] ${finalDescription}`.slice(0, 500);
+    }
 
     const base = {
       ok: true,
@@ -289,7 +343,11 @@ export async function POST(req: Request) {
 
     const kindLabel = kind === "deposit" ? "واریز" : kind === "fee" ? "کارمزد" : "برداشت";
     const direction = kind === "deposit" ? "به" : "از";
-    const tail = status === "pending" ? " — در انتظار دسته‌بندی" : "";
+    const tail = needsAccountReview
+      ? " — در انتظار تعیین حساب بانکی در برنامه"
+      : status === "pending"
+      ? " — در انتظار دسته‌بندی"
+      : "";
     const message = `✅ ${kindLabel} ${formatMoney(parsed.amount)} ریال ${direction} «${matched.name}» ثبت شد${tail}.`;
 
     const payload = { ...base, created: true, transactionId: tx.id, message };

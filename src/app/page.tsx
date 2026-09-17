@@ -407,7 +407,12 @@ export default function App() {
                   fallbackTitle="خطایی در بخش تنظیمات رخ داد"
                   onReset={() => loadData()}
                 >
-                  <SettingsTab user={user} onLogout={handleLogout} onRefreshAllData={loadData} />
+                  <SettingsTab
+                    user={user}
+                    onLogout={handleLogout}
+                    onRefreshAllData={loadData}
+                    accounts={accounts}
+                  />
                 </ErrorBoundary>
               )}
             </>

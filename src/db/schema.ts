@@ -77,3 +77,22 @@ export const transactions = pgTable(
     index("idx_tx_to_flow").on(t.toAccountId, t.amount),
   ]
 );
+
+export const smsPatterns = pgTable(
+  "sms_patterns",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    accountId: varchar("account_id", { length: 64 }).notNull(),
+    kind: varchar("kind", { length: 20 }).notNull(),
+    sampleText: text("sample_text").notNull(),
+    bankName: varchar("bank_name", { length: 191 }),
+    cardLast4: varchar("card_last4", { length: 16 }),
+    keywords: text("keywords"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("idx_sms_pat_account").on(t.accountId),
+  ]
+);
+

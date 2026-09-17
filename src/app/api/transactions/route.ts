@@ -195,7 +195,17 @@ export async function POST(req: Request) {
     let actualShamsi = shamsiDate ? String(shamsiDate).trim() : "";
 
     if (actualShamsi && isValidShamsiDateString(actualShamsi)) {
-      txDate = shamsiToGregorian(actualShamsi);
+      const now = new Date();
+      if (actualShamsi === toShamsiDateString(now)) {
+        txDate = shamsiToGregorian(
+          actualShamsi,
+          now.getUTCHours(),
+          now.getUTCMinutes(),
+          now.getUTCSeconds()
+        );
+      } else {
+        txDate = shamsiToGregorian(actualShamsi, 12, 0, 0);
+      }
       actualShamsi = toShamsiDateString(txDate);
     } else if (date) {
       txDate = new Date(date);
@@ -302,7 +312,15 @@ export async function PUT(req: Request) {
     if (shamsiDate) {
       const rawShamsi = String(shamsiDate).trim();
       if (isValidShamsiDateString(rawShamsi)) {
-        dateValue = shamsiToGregorian(rawShamsi);
+        if (existing.date && rawShamsi === existing.shamsiDate) {
+          dateValue = new Date(existing.date);
+        } else {
+          const prevDate = existing.date ? new Date(existing.date) : null;
+          const h = prevDate && !isNaN(prevDate.getTime()) ? prevDate.getUTCHours() : 12;
+          const m = prevDate && !isNaN(prevDate.getTime()) ? prevDate.getUTCMinutes() : 0;
+          const s = prevDate && !isNaN(prevDate.getTime()) ? prevDate.getUTCSeconds() : 0;
+          dateValue = shamsiToGregorian(rawShamsi, h, m, s);
+        }
         shamsiValue = toShamsiDateString(dateValue);
       }
     }
