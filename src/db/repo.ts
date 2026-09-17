@@ -516,8 +516,45 @@ function mapAccount(r: Record<string, unknown>): AccountRow {
 let accountsCache: { at: number; data: AccountRow[] } | null = null;
 const ACCOUNTS_CACHE_TTL = 15_000;
 
-export function invalidateAccountsCache() {
+/** نسخه زمانی آخرین تغییر داده‌ها (تراکنش‌ها یا حساب‌ها) جهت همگام‌سازی سریع و فوق‌سبک کلاینت */
+let lastDataChange = Date.now();
+let syncVersionCache: { at: number; version: string } | null = null;
+const SYNC_CACHE_TTL = 3000;
+
+export function recordDataChange() {
+  lastDataChange = Date.now();
+  syncVersionCache = null;
   accountsCache = null;
+}
+
+export function getLastDataChange(): number {
+  return lastDataChange;
+}
+
+/**
+ * نسخه وضعیت داده‌ها برای سینک فوق‌سبک کلاینت.
+ * از ترکیب آخرین شناسه تراکنش در جدول و زمان تغییرات درون‌حافظه‌ای استفاده می‌کند.
+ * این کوئری روی ایندکس کلید اصلی اجرا می‌شود و کمتر از ۱ میلی‌ثانیه زمان می‌برد.
+ */
+export async function getSyncVersion(): Promise<string> {
+  if (syncVersionCache && Date.now() - syncVersionCache.at < SYNC_CACHE_TTL) {
+    return syncVersionCache.version;
+  }
+  try {
+    const rows = await query<{ id: string }>(
+      `SELECT id FROM transactions ORDER BY id DESC LIMIT 1`
+    );
+    const latestTxId = rows[0]?.id || "none";
+    const version = `${latestTxId}_${lastDataChange}`;
+    syncVersionCache = { at: Date.now(), version };
+    return version;
+  } catch {
+    return `fallback_${lastDataChange}`;
+  }
+}
+
+export function invalidateAccountsCache() {
+  recordDataChange();
 }
 
 export async function listAccounts(): Promise<AccountRow[]> {
@@ -931,6 +968,7 @@ export async function createTransaction(data: {
   );
   const created = await getTransaction(id);
   if (!created) throw new Error("خطا در ثبت تراکنش");
+  recordDataChange();
   return created;
 }
 
@@ -975,10 +1013,12 @@ export async function updateTransaction(
 
   params.push(id);
   await execute(`UPDATE transactions SET ${sets.join(", ")} WHERE id = ?`, params);
+  recordDataChange();
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
   await execute(`DELETE FROM transactions WHERE id = ?`, [id]);
+  recordDataChange();
 }
 
 /**
@@ -1000,6 +1040,7 @@ export async function findRecentDuplicateByHash(
 /** تغییر وضعیت تراکنش (مثلاً از pending به active پس از تکمیل طرف دوم) */
 export async function setTransactionStatus(id: string, status: string): Promise<void> {
   await execute(`UPDATE transactions SET status = ? WHERE id = ?`, [status, id]);
+  recordDataChange();
 }
 
 /* ------------------------------------------------------------------ */
