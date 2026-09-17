@@ -17,6 +17,19 @@ import { toShamsiDateString } from "./date-utils";
 
 export type SmsKind = "deposit" | "withdrawal" | "fee" | "unknown";
 
+export interface MaskedCardToken {
+  raw: string;
+  prefix: string; // ۴ تا ۶ رقم اول
+  suffix: string; // ۴ رقم آخر
+  side: "from" | "to" | "general";
+}
+
+export interface SmsAccountToken {
+  raw: string;
+  pureDigits: string;
+  side: "from" | "to" | "general";
+}
+
 export interface ParsedSms {
   /** آیا پارس موفق بود (حداقل مبلغ شناسایی شده باشد) */
   ok: boolean;
@@ -36,6 +49,12 @@ export interface ParsedSms {
   tracking: string | null;
   /** توکن‌های رقم‌دار کارت/حساب موجود در متن (مثل 6219-86**-****-9023) */
   cardTokens: string[];
+  /** شماره کارت‌های ۱۶ رقمی کامل استخراج‌شده از پیامک (فقط ارقام خالص) */
+  fullCardNumbers: string[];
+  /** توکن‌های کارت ماسک‌شده شامل پیشوند و پسوند (مثل 603799...1234) */
+  maskedCardTokens: MaskedCardToken[];
+  /** توکن‌های شماره حساب با ارقام خالص */
+  accountTokens: SmsAccountToken[];
   /** توکن‌هایی که بعد از «از کارت/حساب …» آمده‌اند (سمت پرداخت‌کننده) */
   fromSideTokens: string[];
   /** توکن‌هایی که بعد از «به کارت/حساب …» آمده‌اند (سمت دریافت‌کننده) */
@@ -418,6 +437,9 @@ export function parseBankSms(raw: string): ParsedSms {
     hasExplicitTime: false,
     tracking: null,
     cardTokens: [],
+    fullCardNumbers: [],
+    maskedCardTokens: [],
+    accountTokens: [],
     fromSideTokens: [],
     toSideTokens: [],
     counterpartyHint: null,
@@ -592,48 +614,131 @@ export function parseBankSms(raw: string): ParsedSms {
   const fromSideTokens: string[] = [];
   const toSideTokens: string[] = [];
   const cardTokenSet = new Set<string>();
+  const fullCardNumbers: string[] = [];
+  const maskedCardTokens: MaskedCardToken[] = [];
+  const accountTokens: SmsAccountToken[] = [];
+
+  // ثبت دقیق و چندسطحی انواع توکن‌های کارت و حساب
+  const recordToken = (rawTok: string, side: "from" | "to" | "general") => {
+    cardTokenSet.add(rawTok);
+    const cleanDigits = rawTok.replace(/\D/g, "");
+
+    // شماره کارت ۱۶ رقمی کامل
+    if (cleanDigits.length === 16 && !rawTok.includes("*") && !rawTok.includes("x") && !rawTok.includes("X")) {
+      if (!fullCardNumbers.includes(cleanDigits)) fullCardNumbers.push(cleanDigits);
+    }
+    // شماره کارت ماسک‌شده دوطرفه یا یک‌طرفه
+    else if (rawTok.includes("*") || rawTok.includes("x") || rawTok.includes("X")) {
+      const dualMatch = rawTok.match(/^(\d{4,6})[-*.\s]*[\*xX.]{2,8}[-*.\s]*(\d{4})$/);
+      if (dualMatch) {
+        maskedCardTokens.push({
+          raw: rawTok,
+          prefix: dualMatch[1],
+          suffix: dualMatch[2],
+          side,
+        });
+        cardTokenSet.add(dualMatch[2]);
+      } else {
+        const sufMatch = rawTok.match(/(\d{4})$/);
+        if (sufMatch) {
+          maskedCardTokens.push({
+            raw: rawTok,
+            prefix: "",
+            suffix: sufMatch[1],
+            side,
+          });
+          cardTokenSet.add(sufMatch[1]);
+        }
+      }
+    }
+    // شماره حساب با ارقام خالص
+    else if (cleanDigits.length >= 6) {
+      accountTokens.push({
+        raw: rawTok,
+        pureDigits: cleanDigits,
+        side,
+      });
+    }
+  };
 
   // «از/به کارت|حساب|شبا 1234-…» — جهت انتقال را مشخص می‌کند
-  const SIDE_RE = /(?:^|[\s;])(از|به)\s*(?:شماره\s*)?(?:کارت|حساب|شبا)?\s*[:;\-]*\s*([0-9][0-9.\-*]{3,})/g;
+  const SIDE_RE = /(?:^|[\s;])(از|به)\s*(?:شماره\s*)?(?:کارت|حساب|شبا)?\s*[:;\-]*\s*([0-9][0-9.\-*xX]{3,})/g;
   for (const m of normalized.matchAll(SIDE_RE)) {
+    const side = m[1] === "از" ? "from" : "to";
     const token = m[2];
-    if (m[1] === "از") fromSideTokens.push(token);
+    if (side === "from") fromSideTokens.push(token);
     else toSideTokens.push(token);
-    cardTokenSet.add(token);
+    recordToken(token, side);
     const start = m.index ?? 0;
     consumed.push({ start, end: start + m[0].length });
   }
 
   // توکن‌های دارای برچسب کارت/حساب بدون حرف اضافه («برداشت کارت 6219-…»)
-  const CARD_KW_RE = /(?:کارت|حساب|شبا)\s*[:;\-]*\s*([0-9][0-9.\-*]{3,})/g;
+  const CARD_KW_RE = /(?:کارت|حساب|شبا)\s*[:;\-]*\s*([0-9][0-9.\-*xX]{3,})/g;
   for (const m of normalized.matchAll(CARD_KW_RE)) {
-    cardTokenSet.add(m[1]);
+    recordToken(m[1], "general");
     const start = m.index ?? 0;
     consumed.push({ start, end: start + m[0].length });
   }
 
-  // شماره کارت ۱۶ رقمی بدون برچسب
+  // شماره کارت ۱۶ رقمی بدون برچسب با جداکننده («6037-9918-2736-4510» یا «6037 9918 2736 4510»)
+  for (const m of normalized.matchAll(/(?:^|[^\d])(\d{4}[-\s.]\d{4}[-\s.]\d{4}[-\s.]\d{4})(?=[^\d]|$)/g)) {
+    const cleanDigits = m[1].replace(/\D/g, "");
+    if (cleanDigits.length === 16) {
+      recordToken(cleanDigits, "general");
+      const start = (m.index ?? 0) + m[0].length - m[1].length;
+      consumed.push({ start, end: start + m[1].length });
+    }
+  }
+
+  // شماره کارت ۱۶ رقمی پیوسته بدون برچسب
   for (const m of normalized.matchAll(/(?:^|\s)([0-9]{16})(?=\s|$)/g)) {
-    cardTokenSet.add(m[1]);
+    recordToken(m[1], "general");
     const start = m.index ?? 0;
     consumed.push({ start, end: start + m[0].length });
   }
 
-  // شماره حساب نقطه‌دار بدون برچسب («292.8000.10195601.1» پاسارگاد) —
-  // باید حتماً نقطه داشته باشد (تا مبلغ ساده، حساب خوانده نشود) و روی بازه مصرف‌شده (مثل تاریخ) نیفتد
+  // شماره کارت ماسک‌شده دوطرفه بدون برچسب («603799******1234» یا «6037-99**-****-1234»)
+  for (const m of normalized.matchAll(/(?:^|[\s;:\-_])(\d{4}[-.\s]?\d{2})[-*.\s]*[\*xX.]{2,8}[-*.\s]*(\d{4})(?=[\s;:\-_]|$)/g)) {
+    const start = m.index ?? 0;
+    const range = { start, end: start + m[0].length };
+    if (!consumed.some((r) => overlaps(r, range))) {
+      maskedCardTokens.push({
+        raw: m[0].trim(),
+        prefix: m[1].replace(/\D/g, ""),
+        suffix: m[2],
+        side: "general",
+      });
+      cardTokenSet.add(m[0].trim());
+      cardTokenSet.add(m[2]);
+      consumed.push(range);
+    }
+  }
+
+  // شماره حساب نقطه‌دار بدون برچسب («292.8000.10195601.1» پاسارگاد)
   for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9][0-9.]{4,})(?=[\s;_]|$)/g)) {
     const tok = m[1].replace(/\.+$/, "");
     if (tok.length < 5 || !tok.includes(".")) continue;
     const start = (m.index ?? 0) + m[0].length - m[1].length;
     const range = { start, end: start + tok.length };
     if (consumed.some((r) => overlaps(r, range))) continue;
-    cardTokenSet.add(tok);
+    recordToken(tok, "general");
     consumed.push(range);
   }
 
-  // شماره حساب بلند (۱۰ تا ۱۶ رقم) بدون برچسب («80000609969009» پارسیان) —
-  // اگر قبلش برچسب مبلغ/انتقال یا بعدش واحد پول باشد، مبلغ است نه شماره حساب
-  for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9]{10,16})(?=[\s;_]|$)/g)) {
+  // شماره حساب خط‌تیره‌دار بدون برچسب («849-800-1234567-1» سامان)
+  for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9][0-9\-]{5,})(?=[\s;_]|$)/g)) {
+    const tok = m[1].replace(/\-+$/, "");
+    if (tok.length < 6 || !tok.includes("-")) continue;
+    const start = (m.index ?? 0) + m[0].length - m[1].length;
+    const range = { start, end: start + tok.length };
+    if (consumed.some((r) => overlaps(r, range))) continue;
+    recordToken(tok, "general");
+    consumed.push(range);
+  }
+
+  // شماره حساب بلند (۶ تا ۱۸ رقم) بدون برچسب («80000609969009» پارسیان یا «0102030405001» ملی)
+  for (const m of normalized.matchAll(/(?:^|[\s;_])([0-9]{6,18})(?=[\s;_]|$)/g)) {
     const start = (m.index ?? 0) + m[0].length - m[1].length;
     const range = { start, end: start + m[1].length };
     if (consumed.some((r) => overlaps(r, range))) continue;
@@ -641,15 +746,21 @@ export function parseBankSms(raw: string): ParsedSms {
     const afterTxt = normalized.slice(range.end, range.end + 12);
     if (/مبلغ|انتقال|برداشت|واریز|کارمزد/.test(beforeTxt)) continue;
     if (/ریال|ريال|تومان|تومن/.test(afterTxt)) continue;
-    cardTokenSet.add(m[1]);
+    recordToken(m[1], "general");
     consumed.push(range);
   }
 
-  // شماره کارت ۴ رقمی ماسک‌شده با ستاره یا ضربدر («****1234» یا «6037-****-****-1234»)
+  // شماره کارت ۴ رقمی ماسک‌شده با ستاره یا ضربدر («****1234»)
   for (const m of normalized.matchAll(/(?:^|[\s;:\-_])(?:\*{2,4}|[xX]{2,4})[-*.\s]*(\d{4})(?=[\s;:\-_]|$)/g)) {
     const start = m.index ?? 0;
     const range = { start, end: start + m[0].length };
     if (!consumed.some((r) => overlaps(r, range))) {
+      maskedCardTokens.push({
+        raw: m[0].trim(),
+        prefix: "",
+        suffix: m[1],
+        side: "general",
+      });
       cardTokenSet.add(m[1]);
       consumed.push(range);
     }
@@ -769,6 +880,9 @@ export function parseBankSms(raw: string): ParsedSms {
     hasExplicitTime,
     tracking,
     cardTokens: [...cardTokenSet],
+    fullCardNumbers,
+    maskedCardTokens,
+    accountTokens,
     fromSideTokens,
     toSideTokens,
     counterpartyHint,
