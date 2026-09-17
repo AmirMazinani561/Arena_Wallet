@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { translateDbError } from "@/db/client";
 import { ensureDatabase, listAccounts, getLedger } from "@/db/repo";
-import { getSessionFromRequest } from "@/lib/session";
+import { getSessionFromRequest, createSessionToken } from "@/lib/session";
 import { getCurrentShamsi } from "@/lib/date-utils";
 
 export const dynamic = "force-dynamic";
@@ -140,6 +140,8 @@ export async function GET(req: Request) {
         else totalOut += Number(r.amount) || 0;
       });
 
+      const exportToken = createSessionToken({ id: session.userId, username: session.username });
+
       const html = `<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
@@ -198,6 +200,23 @@ export async function GET(req: Request) {
       user-select: none;
     }
     .print-btn:active { background: #0369a1; transform: scale(0.99); }
+    .btn-save {
+      width: 100%;
+      padding: 12px 18px;
+      background: #059669;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+      touch-action: manipulation;
+      user-select: none;
+    }
+    .btn-save:active { background: #047857; transform: scale(0.99); }
     .btn-copy {
       width: 100%;
       padding: 10px 16px;
@@ -244,6 +263,7 @@ export async function GET(req: Request) {
         align-items: center;
       }
       .print-btn { width: auto; }
+      .btn-save { width: auto; }
       .btn-copy { width: auto; }
     }
     .page-container {
@@ -330,15 +350,21 @@ export async function GET(req: Request) {
     <div class="action-bar-inner">
       <div class="btn-group">
         <button id="printBtn" class="print-btn" type="button" onclick="triggerPrintOrShare()">
-          🖨️ چاپ / ذخیره به عنوان PDF
+          🖨️ چاپ / اشتراک‌گذاری
+        </button>
+        <button class="btn-save" type="button" onclick="triggerSaveToFile()">
+          📁 ذخیره سند در فایل‌ها (Save to Files)
         </button>
         <button class="btn-copy" type="button" onclick="copyReportLink()">
-          📋 کپی لینک گزارش جهت باز کردن در سافاری
+          📋 کپی لینک جهت باز کردن در سافاری
         </button>
       </div>
-      <div id="copyToast" class="copy-toast">✅ لینک کپی شد! می‌توانید آن را در مرورگر Safari باز کنید.</div>
+      <div id="copyToast" class="copy-toast">✅ لینک معتبر کپی شد! می‌توانید آن را در مرورگر Safari بدون نیاز به ورود مجدد باز کنید.</div>
       <div class="ios-hint">
-        📱 <b>راهنمای کاربران آیفون:</b> با زدن دکمه بالا، منوی استاندارد آیفون باز می‌شود؛ برای چاپ <b>Print</b> و برای ذخیره سند <b>Save to Files</b> را انتخاب فرمایید. همچنین با دکمه «کپی لینک» می‌توانید گزارش را مستقیماً در مرورگر کامل Safari باز کنید.
+        📱 <b>راهنمای کاربران آیفون:</b>
+        <br>• <b>ذخیره مستقیم در Files:</b> دکمه سبز <b>«ذخیره سند در فایل‌ها»</b> را بزنید تا گزینه <b>Save to Files</b> مستقیماً باز شود.
+        <br>• <b>چاپ یا تبدیل به PDF در پرینت:</b> دکمه آبی <b>«چاپ / اشتراک»</b> را بزنید؛ در پنجره بازشده <b>Print</b> را انتخاب کنید و در پیش‌نمایش پرینت با دو انگشت زوم به بیرون (Pinch-Out) کنید تا سند PDF شود، سپس <b>Save to Files</b> را بزنید.
+        <br>• <b>باز کردن در مرورگر Safari:</b> دکمه <b>«کپی لینک»</b> را بزنید و در برنامه Safari پیست کنید تا تمام امکانات چاپ و ذخیره در مرورگر فعال شوند.
       </div>
     </div>
   </div>
@@ -416,16 +442,29 @@ export async function GET(req: Request) {
   </div>
 
   <script>
+    const exportToken = "${exportToken}";
+
+    function getAuthenticatedShareUrl() {
+      try {
+        const u = new URL(window.location.href);
+        if (!u.searchParams.has("token") && exportToken) {
+          u.searchParams.set("token", exportToken);
+        }
+        return u.toString();
+      } catch (e) {
+        return window.location.href;
+      }
+    }
+
     async function triggerPrintOrShare() {
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const isStandalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      const shareUrl = getAuthenticatedShareUrl();
 
-      // در آیفون (به‌ویژه وب‌اپلیکیشن هوم‌اسکرین که window.print مسدود است) از منوی سیستمی نیتیو استفاده می‌شود
       if (isIOS && navigator.share) {
         try {
           await navigator.share({
             title: document.title,
-            url: window.location.href,
+            url: shareUrl,
           });
           return;
         } catch (err) {
@@ -433,23 +472,50 @@ export async function GET(req: Request) {
         }
       }
 
-      // سایر سیستم‌ها و دسکتاپ
       try {
         window.print();
       } catch (e) {
         if (navigator.share) {
-          navigator.share({ title: document.title, url: window.location.href });
+          navigator.share({ title: document.title, url: shareUrl });
         }
       }
     }
 
+    async function triggerSaveToFile() {
+      try {
+        const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+        const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+        const cleanTitle = (document.title || "صورت‌حساب").replace(/[\\/:*?"<>|]/g, "_");
+        const file = new File([blob], cleanTitle + ".html", { type: "text/html" });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: document.title,
+          });
+          return;
+        }
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = cleanTitle + ".html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+        triggerPrintOrShare();
+      }
+    }
+
     async function copyReportLink() {
+      const shareUrl = getAuthenticatedShareUrl();
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(window.location.href);
+          await navigator.clipboard.writeText(shareUrl);
         } else {
           const inp = document.createElement("input");
-          inp.value = window.location.href;
+          inp.value = shareUrl;
           document.body.appendChild(inp);
           inp.select();
           document.execCommand("copy");
@@ -458,10 +524,10 @@ export async function GET(req: Request) {
         const toast = document.getElementById("copyToast");
         if (toast) {
           toast.style.display = "block";
-          setTimeout(() => { toast.style.display = "none"; }, 4000);
+          setTimeout(() => { toast.style.display = "none"; }, 5000);
         }
       } catch (err) {
-        prompt("آدرس گزارش جهت باز کردن در مرورگر سافاری:", window.location.href);
+        prompt("آدرس معتبر گزارش جهت باز کردن در مرورگر سافاری:", shareUrl);
       }
     }
 

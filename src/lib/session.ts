@@ -89,7 +89,26 @@ export function parseCookieHeader(cookieHeader?: string | null): Map<string, str
 export function getSessionFromRequest(req: Request): SessionPayload | null {
   const cookieHeader = req.headers.get("cookie");
   const cookies = parseCookieHeader(cookieHeader);
-  const token = cookies.get(SESSION_COOKIE_NAME);
+  let token = cookies.get(SESSION_COOKIE_NAME);
+
+  // اگر کوکی وجود نداشت، توکن را از پارامتر URL (جهت خروجی‌ها و باز کردن لینک در سافاری) یا هدر احراز هویت بخوان
+  if (!token) {
+    try {
+      const url = new URL(req.url);
+      const queryToken = url.searchParams.get("token");
+      if (queryToken) {
+        token = queryToken;
+      }
+    } catch {}
+
+    if (!token) {
+      const authHeader = req.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7).trim();
+      }
+    }
+  }
+
   return verifySessionToken(token);
 }
 
