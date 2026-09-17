@@ -151,6 +151,11 @@ function extractAccountCredentials(acc: AccountRow): AccountCredentials {
   };
 }
 
+/** استخراج ۴ رقم‌های پایانی یک حساب جهت سازگاری کامل */
+function accountLast4s(acc: AccountRow): string[] {
+  return extractAccountCredentials(acc).last4s;
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, tokenRequired: Boolean(intakeToken()) });
 }
@@ -587,9 +592,13 @@ export async function POST(req: Request) {
     }
 
     if (kind === "unknown" && matched) {
-      const matchedLast4 = [...accountLast4s(matched)];
-      const inFrom = parsed.fromSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
-      const inTo = parsed.toSideTokens.some((t) => matchedLast4.includes(tokenLast4(t)));
+      const matchedCred = extractAccountCredentials(matched);
+      const inFrom =
+        parsed.fromSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
+      const inTo =
+        parsed.toSideTokens.some((t) => matchedCred.last4s.includes(tokenLast4(t))) ||
+        parsed.fullCardNumbers.some((c) => matchedCred.fullCards.includes(c));
       if (inTo && !inFrom) kind = "deposit";
       else if (inFrom && !inTo) kind = "withdrawal";
     }
