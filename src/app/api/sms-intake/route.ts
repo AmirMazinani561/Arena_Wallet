@@ -12,7 +12,7 @@ import {
   PENDING_EXPENSE_CATEGORY_ID,
   PENDING_INCOME_CATEGORY_ID,
 } from "@/db/repo";
-import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind, type SmsKind } from "@/lib/sms-parser";
+import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind, type SmsKind, KNOWN_BANKS } from "@/lib/sms-parser";
 import { formatMoney } from "@/lib/date-utils";
 import { sanitizeString } from "@/lib/validation";
 
@@ -57,11 +57,11 @@ function plain(message: string, status = 200): NextResponse {
   });
 }
 
-/** استخراج ۴ رقم آخر همه توکن‌های عددی «اطلاعات تکمیلی» یک حساب */
+/** استخراج ۴ رقم آخر همه توکن‌های عددی «اطلاعات تکمیلی» و «نام» یک حساب */
 function accountLast4s(acc: AccountRow): Set<string> {
   const out = new Set<string>();
-  if (!acc.detailInfo) return out;
-  const norm = normalizeSmsText(acc.detailInfo);
+  const combined = `${acc.name} ${acc.detailInfo || ""}`;
+  const norm = normalizeSmsText(combined);
   for (const m of norm.matchAll(/[0-9][0-9.\-*]{3,}/g)) {
     const l4 = tokenLast4(m[0]);
     if (l4.length === 4) out.add(l4);
@@ -151,91 +151,230 @@ export async function POST(req: Request) {
       return asText ? plain(payload.message) : NextResponse.json(payload);
     }
 
-    /* ---------- تطبیق حساب بانکی ---------- */
+    /* ---------- استخراج توکن‌های کارت و حساب به تفکیک مبدأ و مقصد ---------- */
     const accounts = await listAccounts();
     const assetAccounts = accounts.filter((a) => a.type === "bank" || a.type === "cash");
-    const smsTokens = [...parsed.cardTokens, ...parsed.fromSideTokens, ...parsed.toSideTokens];
-    const smsLast4 = new Set<string>();
-    for (const t of smsTokens) {
-      smsLast4.add(tokenLast4(t));
-      // حساب نقطه‌دار («292.8000.10195601.1»): اگر کاربر پسوند آخر را ذخیره نکرده باشد هم مچ شود
+
+    const fromLast4 = new Set<string>();
+    for (const t of parsed.fromSideTokens) {
+      const l4 = tokenLast4(t);
+      if (l4.length === 4) fromLast4.add(l4);
       const stripped = t.replace(/\.\d+$/, "");
       if (stripped !== t) {
         const l4s = tokenLast4(stripped);
-        if (l4s.length === 4) smsLast4.add(l4s);
+        if (l4s.length === 4) fromLast4.add(l4s);
       }
     }
 
-    /* ---------- تطبیق با الگوهای آموزش‌داده‌شده ---------- */
+    const toLast4 = new Set<string>();
+    for (const t of parsed.toSideTokens) {
+      const l4 = tokenLast4(t);
+      if (l4.length === 4) toLast4.add(l4);
+      const stripped = t.replace(/\.\d+$/, "");
+      if (stripped !== t) {
+        const l4s = tokenLast4(stripped);
+        if (l4s.length === 4) toLast4.add(l4s);
+      }
+    }
+
+    const generalLast4 = new Set<string>();
+    for (const t of parsed.cardTokens) {
+      const l4 = tokenLast4(t);
+      if (l4.length === 4) generalLast4.add(l4);
+      const stripped = t.replace(/\.\d+$/, "");
+      if (stripped !== t) {
+        const l4s = tokenLast4(stripped);
+        if (l4s.length === 4) generalLast4.add(l4s);
+      }
+    }
+
+    const allSmsLast4 = new Set([...fromLast4, ...toLast4, ...generalLast4]);
+
+    // قرینه جهت برای اولویت‌دهی به کارت مبدأ یا مقصد
+    const likelyDeposit =
+      parsed.amountSign === "+" ||
+      parsed.kind === "deposit" ||
+      explicitKind === "deposit" ||
+      /(?:واریز|نشست|وصول|بستانکار|سود|حقوق)/.test(rawText);
+
+    const likelyWithdrawal =
+      parsed.amountSign === "-" ||
+      parsed.kind === "withdrawal" ||
+      parsed.kind === "fee" ||
+      explicitKind === "withdrawal" ||
+      /(?:برداشت|خرید|پرید|بدهکار|کارمزد)/.test(rawText);
+
+    /* ---------- ارزیابی و امتیازدهی چندمعیاره همه حساب‌ها (Best-Match Scoring) ---------- */
+    interface CandidateEvaluation {
+      account: AccountRow;
+      score: number;
+      reasons: string[];
+      matchedKind?: "deposit" | "withdrawal";
+    }
+
+    const trainedPatterns = await listSmsPatterns();
+    const evaluatedCandidates: CandidateEvaluation[] = [];
+
+    for (const acc of assetAccounts) {
+      let score = 0;
+      const reasons: string[] = [];
+      let candidateMatchedKind: "deposit" | "withdrawal" | undefined;
+
+      const accLast4 = accountLast4s(acc);
+      const accCombined = `${acc.name} ${acc.detailInfo || ""}`;
+
+      // ۱) تطبیق ۴ رقم کارت/حساب کاربر با توکن‌های رسمی پیامک (حذف قطعی جستجوی رشته‌ای در متن خام)
+      let cardMatched = false;
+      for (const l4 of accLast4) {
+        if (likelyWithdrawal) {
+          if (fromLast4.has(l4) || generalLast4.has(l4)) {
+            score += 120;
+            reasons.push("کارت/حساب مبدأ");
+            cardMatched = true;
+            break;
+          } else if (toLast4.has(l4)) {
+            score += 25;
+            reasons.push("کارت مقصد");
+            cardMatched = true;
+            break;
+          }
+        } else if (likelyDeposit) {
+          if (toLast4.has(l4) || generalLast4.has(l4)) {
+            score += 120;
+            reasons.push("کارت/حساب مقصد");
+            cardMatched = true;
+            break;
+          } else if (fromLast4.has(l4)) {
+            score += 25;
+            reasons.push("کارت مبدأ");
+            cardMatched = true;
+            break;
+          }
+        } else {
+          if (allSmsLast4.has(l4)) {
+            score += 100;
+            reasons.push("شماره کارت/حساب");
+            cardMatched = true;
+            break;
+          }
+        }
+      }
+
+      // ۲) تطبیق با الگوهای آموزش‌داده‌شده این حساب
+      const accPatterns = trainedPatterns.filter((p) => p.accountId === acc.id);
+      let bestPatScore = 0;
+      for (const pat of accPatterns) {
+        let pScore = 0;
+        // تطبیق کارت الگو فقط در صورتی که در توکن‌های معتبر کارت وجود داشته باشد
+        if (pat.cardLast4) {
+          if (likelyWithdrawal && (fromLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
+            pScore += 120;
+          } else if (likelyDeposit && (toLast4.has(pat.cardLast4) || generalLast4.has(pat.cardLast4))) {
+            pScore += 120;
+          } else if (allSmsLast4.has(pat.cardLast4)) {
+            pScore += 100;
+          }
+        }
+
+        // تطبیق نام بانک الگو
+        if (pat.bankName && parsed.bankHint && (pat.bankName.includes(parsed.bankHint) || parsed.bankHint.includes(pat.bankName))) {
+          pScore += 30;
+        }
+
+        // تطبیق کلیدواژه‌های اختصاصی الگو
+        if (pat.keywords) {
+          try {
+            const kws: string[] = JSON.parse(pat.keywords);
+            let matchCount = 0;
+            for (const kw of kws) {
+              if (rawText.includes(kw)) matchCount++;
+            }
+            if (kws.length > 0) {
+              pScore += Math.round((matchCount / kws.length) * 35);
+            }
+          } catch {}
+        }
+
+        if (pScore > bestPatScore) {
+          bestPatScore = pScore;
+          if (pat.kind === "deposit" && /(?:واریز|نشست|وصول|بستانکار|\+)/.test(rawText)) {
+            candidateMatchedKind = "deposit";
+          } else if (pat.kind === "withdrawal" && /(?:برداشت|خرید|پرید|بدهکار|کارمزد|\-)/.test(rawText)) {
+            candidateMatchedKind = "withdrawal";
+          }
+        }
+      }
+
+      if (bestPatScore > 0) {
+        score += bestPatScore;
+        reasons.push("الگوی آموزش‌داده‌شده");
+      }
+
+      // ۳) تطبیق نام بانک و اعمال جریمه تضاد بانکی
+      if (parsed.bankHint) {
+        const matchesThisBank =
+          accCombined.includes(parsed.bankHint) ||
+          (parsed.bankHint === "بلو" && /بلو|blu/i.test(accCombined)) ||
+          (parsed.bankHint === "ملی" && /ملی/i.test(accCombined)) ||
+          (parsed.bankHint === "ملت" && /ملت/i.test(accCombined));
+
+        if (matchesThisBank) {
+          score += 60;
+          reasons.push(`نام بانک (${parsed.bankHint})`);
+        } else {
+          // اگر پیامک قطعاً متعلق به یک بانک دیگر است، این حساب جریمه سنگین می‌گیرد
+          const conflictingBank = KNOWN_BANKS.find(
+            (b) => b.canonical !== parsed.bankHint && accCombined.includes(b.canonical)
+          );
+          if (conflictingBank) {
+            score -= 200;
+          }
+        }
+      }
+
+      // ۴) تطبیق نام صریح حساب در متن پیامک
+      if (acc.name.length >= 3 && rawText.includes(acc.name)) {
+        score += 35;
+        reasons.push("نام حساب در متن");
+      }
+
+      evaluatedCandidates.push({
+        account: acc,
+        score,
+        reasons,
+        matchedKind: candidateMatchedKind,
+      });
+    }
+
+    // مرتب‌سازی کاندیداها بر اساس بیشترین امتیاز
+    evaluatedCandidates.sort((a, b) => b.score - a.score);
+    const bestCandidate = evaluatedCandidates[0];
+    const runnerUpCandidate = evaluatedCandidates[1];
+
     let matched: AccountRow | null = null;
     let matchedVia = "";
     let patternMatchedKind: "deposit" | "withdrawal" | null = null;
-
-    const trainedPatterns = await listSmsPatterns();
-    for (const pat of trainedPatterns) {
-      const acc = assetAccounts.find((a) => a.id === pat.accountId);
-      if (!acc) continue;
-
-      let score = 0;
-      if (pat.cardLast4 && (smsLast4.has(pat.cardLast4) || rawText.includes(pat.cardLast4))) {
-        score += 80;
-      }
-      if (pat.bankName && (rawText.includes(pat.bankName) || acc.name.includes(pat.bankName))) {
-        score += 25;
-      }
-      if (pat.keywords) {
-        try {
-          const kws: string[] = JSON.parse(pat.keywords);
-          let matchCount = 0;
-          for (const kw of kws) {
-            if (rawText.includes(kw)) matchCount++;
-          }
-          if (kws.length > 0) {
-            score += Math.round((matchCount / kws.length) * 45);
-          }
-        } catch {}
-      }
-
-      if (score >= 45) {
-        matched = acc;
-        matchedVia = "الگوی آموزش‌داده‌شده";
-        // نوع تراکنش از الگو فقط در صورتی استنباط می‌شود که کلمات جهت‌دار متناظر در پیامک وجود داشته باشند
-        // تطبیق شماره کارت صرفاً حساب بانکی را تعیین می‌کند نه جهت تراکنش را
-        if (pat.kind === "deposit" && /(?:واریز|نشست|وصول|بستانکار|\+)/.test(rawText)) {
-          patternMatchedKind = "deposit";
-        } else if (pat.kind === "withdrawal" && /(?:برداشت|خرید|پرید|بدهکار|کارمزد|\-)/.test(rawText)) {
-          patternMatchedKind = "withdrawal";
-        }
-        break;
-      }
-    }
-
-    /* ---------- تطبیق معمولی حساب در صورت عدم مچ با الگو ---------- */
-    if (!matched) {
-      for (const acc of assetAccounts) {
-        const accLast4 = accountLast4s(acc);
-        if ([...accLast4].some((x) => smsLast4.has(x))) {
-          matched = acc;
-          matchedVia = "شماره کارت/حساب";
-          break;
-        }
-      }
-    }
-
-    if (!matched && parsed.bankHint) {
-      const byName = assetAccounts.filter(
-        (a) => a.name.includes(parsed.bankHint as string) || (a.detailInfo || "").includes(parsed.bankHint as string)
-      );
-      if (byName.length === 1) {
-        matched = byName[0];
-        matchedVia = "نام بانک";
-      } else if (byName.length > 1) {
-        matched = byName[0];
-        matchedVia = `چندین حساب ${parsed.bankHint}`;
-      }
-    }
-
     let needsAccountReview = false;
+
+    if (bestCandidate && bestCandidate.score >= 80) {
+      // تطابق قوی و مطمئن (شماره کارت یا الگو + بانک)
+      matched = bestCandidate.account;
+      matchedVia = bestCandidate.reasons.join(" + ") || "تطبیق الگو";
+      patternMatchedKind = bestCandidate.matchedKind || null;
+    } else if (bestCandidate && bestCandidate.score >= 50) {
+      // تطابق با نام بانک یا امتیاز متوسط
+      if (!runnerUpCandidate || bestCandidate.score - runnerUpCandidate.score >= 20) {
+        matched = bestCandidate.account;
+        matchedVia = bestCandidate.reasons.join(" + ") || "نام بانک";
+        patternMatchedKind = bestCandidate.matchedKind || null;
+      } else {
+        // دو یا چند حساب با امتیاز نزدیک در یک بانک (نیاز به بازبینی توسط کاربر)
+        matched = bestCandidate.account;
+        matchedVia = `چندین حساب مرتبط با ${parsed.bankHint || "پیامک"}`;
+        needsAccountReview = true;
+      }
+    }
+
     if (!matched) {
       if (assetAccounts.length > 0) {
         matched = assetAccounts[0];

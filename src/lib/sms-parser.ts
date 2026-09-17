@@ -114,28 +114,247 @@ const WITHDRAW_HINTS: [RegExp, number][] = [
   [/بدهکار/g, 1],
 ];
 
-/** نام بانک‌های رایج برای تشخیص از روی متن پیامک (ترتیب از خاص به عام) */
-const BANK_HINTS = [
-  "بلو",
-  "سامان",
-  "ملت",
-  "ملی",
-  "صادرات",
-  "سپه",
-  "پارسیان",
-  "پاسارگاد",
-  "تجارت",
-  "آینده",
-  "رفاه کارگران",
-  "رفاه",
-  "سینا",
-  "خاورمیانه",
-  "مهر ایران",
-  "شهر",
-  "انصاری",
-  "گردشگری",
-  "دیجیتال",
+/** تعریف جامع بانک‌های ایرانی با پیش‌شماره کارت (BIN)، پیشوندهای رسمی و الگوهای ضد خطا */
+export interface BankRule {
+  canonical: string;
+  bins?: string[];
+  aliases?: string[];
+  strongRegex: RegExp;
+  weakRegex?: RegExp;
+}
+
+export const KNOWN_BANKS: BankRule[] = [
+  {
+    canonical: "بلو",
+    aliases: ["بلوبانک", "بلو بانک", "blubank"],
+    bins: ["621986"],
+    strongRegex: /(?:^|[^\p{L}])(?:بلوبانک|بلو\s*بانک|بانک\s*بلو|blubank)(?:[^\p{L}]|$)/ui,
+    weakRegex: /(?:^|[\r\n\s;\[])بلو(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "ملی",
+    aliases: ["ملی ایران", "بانک ملی"],
+    bins: ["603799"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+ملی(?:\s+ایران)?(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:کد|کارت|بیمه|شرکت|صندوق|روزنامه|ارز)\s+)(?:^|[^\p{L}])ملی\s+ایران(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "ملت",
+    aliases: ["بانک ملت"],
+    bins: ["610433"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+ملت(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:بیمه|خیابان|سینما|پارک)\s+)(?:^|[^\p{L}])ملت(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "صادرات",
+    aliases: ["صادرات ایران", "بانک صادرات"],
+    bins: ["603769"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+صادرات(?:\s+ایران)?(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:توسعه|پایانه|گمرک)\s+)(?:^|[^\p{L}])صادرات\s+ایران(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "سپه",
+    aliases: ["بانک سپه"],
+    bins: ["589210"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+سپه(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:فروشگاه|میدان|خیابان)\s+)(?:^|[\r\n\[])\s*سپه(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "سامان",
+    aliases: ["بانک سامان"],
+    bins: ["621986"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+سامان(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:نام|طرف|به|آقای|خانم)\s+)(?:^|[\r\n\[])\s*سامان\s*[:\-\]]/u,
+  },
+  {
+    canonical: "پاسارگاد",
+    aliases: ["بانک پاسارگاد"],
+    bins: ["502229", "639347"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+)?پاسارگاد(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "تجارت",
+    aliases: ["بانک تجارت"],
+    bins: ["585983"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+تجارت(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:مرکز|کارت|اتاق|وزارت|برج)\s+)(?:^|[\r\n\[])\s*تجارت\s*[:\-\]]/u,
+  },
+  {
+    canonical: "پارسیان",
+    aliases: ["بانک پارسیان"],
+    bins: ["622106", "639194", "627884"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+)?پارسیان(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "آینده",
+    aliases: ["بانک آینده"],
+    bins: ["636214"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+آینده(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "رفاه",
+    aliases: ["رفاه کارگران", "بانک رفاه", "بانک رفاه کارگران"],
+    bins: ["589463"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+رفاه(?:\s+کارگران)?(?:[^\p{L}]|$)/u,
+    weakRegex: /(?:^|[^\p{L}])رفاه\s+کارگران(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "شهر",
+    aliases: ["بانک شهر"],
+    bins: ["502806"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+شهر(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "کشاورزی",
+    aliases: ["بانک کشاورزی"],
+    bins: ["603770"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+کشاورزی(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "مسکن",
+    aliases: ["بانک مسکن"],
+    bins: ["628023"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+مسکن(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "سینا",
+    aliases: ["بانک سینا"],
+    bins: ["639346", "627353"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+سینا(?:[^\p{L}]|$)/u,
+    weakRegex: /(?<!(?:نام|طرف|به|آقای)\s+)(?:^|[\r\n\[])\s*سینا\s*[:\-\]]/u,
+  },
+  {
+    canonical: "مهر ایران",
+    aliases: ["قرض الحسنه مهر ایران", "بانک مهر ایران"],
+    bins: ["606373"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+|قرض\s*الحسنه\s*)?مهر\s*ایران(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "رسالت",
+    aliases: ["قرض الحسنه رسالت", "بانک رسالت"],
+    bins: ["504172"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+|قرض\s*الحسنه\s*)?رسالت(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "خاورمیانه",
+    aliases: ["بانک خاورمیانه"],
+    bins: ["505809"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+)?خاورمیانه(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "گردشگری",
+    aliases: ["بانک گردشگری"],
+    bins: ["505416"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+گردشگری(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "اقتصاد نوین",
+    aliases: ["بانک اقتصاد نوین"],
+    bins: ["627412"],
+    strongRegex: /(?:^|[^\p{L}])(?:بانک\s+)?اقتصاد\s*نوین(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "کارآفرین",
+    aliases: ["بانک کارآفرین"],
+    bins: ["627488"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+کارآفرین(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "دی",
+    aliases: ["بانک دی"],
+    bins: ["502938"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+دی(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "ایران زمین",
+    aliases: ["بانک ایران زمین"],
+    bins: ["505785"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+ایران\s*زمین(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "سرمایه",
+    aliases: ["بانک سرمایه"],
+    bins: ["639607"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+سرمایه(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "پست بانک",
+    aliases: ["پست بانک ایران"],
+    bins: ["627760"],
+    strongRegex: /(?:^|[^\p{L}])پست\s*بانک(?:\s+ایران)?(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "توسعه تعاون",
+    aliases: ["بانک توسعه تعاون"],
+    bins: ["502908"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+توسعه\s*تعاون(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "قوامین",
+    aliases: ["بانک قوامین"],
+    bins: ["639599"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+قوامین(?:[^\p{L}]|$)/u,
+  },
+  {
+    canonical: "انصار",
+    aliases: ["بانک انصار"],
+    bins: ["627381"],
+    strongRegex: /(?:^|[^\p{L}])بانک\s+انصار(?:[^\p{L}]|$)/u,
+  },
 ];
+
+export function detectBankName(
+  normalized: string,
+  cardTokens: string[],
+  counterpartyHint: string | null
+): string | null {
+  // ۱) بررسی ۲ سطر اول متن (سربرگ رسمی پیامک)
+  const lines = normalized.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+  const headerLines = lines.slice(0, 2).join(" ");
+  for (const b of KNOWN_BANKS) {
+    if (b.strongRegex.test(headerLines)) {
+      return b.canonical;
+    }
+    if (b.weakRegex && b.weakRegex.test(headerLines)) {
+      if (!counterpartyHint || !counterpartyHint.includes(b.canonical)) {
+        return b.canonical;
+      }
+    }
+  }
+
+  // ۲) بررسی کل متن با الگوهای قوی (نام‌های دارای پیشوند «بانک» یا نام‌های منحصربه‌فرد)
+  for (const b of KNOWN_BANKS) {
+    if (b.strongRegex.test(normalized)) {
+      return b.canonical;
+    }
+  }
+
+  // ۳) تطبیق پیش‌شماره کارت‌های یافت‌شده در پیامک (BIN)
+  for (const tok of cardTokens) {
+    const cleanDigits = tok.replace(/\D/g, "");
+    if (cleanDigits.length >= 6) {
+      const bin = cleanDigits.slice(0, 6);
+      const match = KNOWN_BANKS.find((b) => b.bins && b.bins.includes(bin));
+      if (match) {
+        if (match.canonical === "سامان" && /(?:بلو|blu)/i.test(normalized)) {
+          return "بلو";
+        }
+        return match.canonical;
+      }
+    }
+  }
+
+  // ۴) بررسی الگوهای ضعیف در کل متن (مشروط به عدم حضور در نام طرف مقابل)
+  for (const b of KNOWN_BANKS) {
+    if (b.weakRegex && b.weakRegex.test(normalized)) {
+      if (!counterpartyHint || !counterpartyHint.includes(b.canonical)) {
+        return b.canonical;
+      }
+    }
+  }
+
+  return null;
+}
 
 /* ------------------------------------------------------------------ */
 /*  پارسر اصلی                                                          */
@@ -426,6 +645,16 @@ export function parseBankSms(raw: string): ParsedSms {
     consumed.push(range);
   }
 
+  // شماره کارت ۴ رقمی ماسک‌شده با ستاره یا ضربدر («****1234» یا «6037-****-****-1234»)
+  for (const m of normalized.matchAll(/(?:^|[\s;:\-_])(?:\*{2,4}|[xX]{2,4})[-*.\s]*(\d{4})(?=[\s;:\-_]|$)/g)) {
+    const start = m.index ?? 0;
+    const range = { start, end: start + m[0].length };
+    if (!consumed.some((r) => overlaps(r, range))) {
+      cardTokenSet.add(m[1]);
+      consumed.push(range);
+    }
+  }
+
   /* ---------- ۵) طرف مقابل ---------- */
   const mCp = normalized.match(
     /(?:از طرف|به نام|بستانکار|پرداخت\s*کننده|دریافت\s*کننده)\s*[:;\-]*\s*([^;\d]{2,60})/
@@ -435,13 +664,8 @@ export function parseBankSms(raw: string): ParsedSms {
     : null;
 
   /* ---------- ۶) نام بانک ---------- */
-  let bankHint: string | null = null;
-  for (const b of BANK_HINTS) {
-    if (new RegExp(`(^|[^\\p{L}])${b}`, "u").test(normalized)) {
-      bankHint = b;
-      break;
-    }
-  }
+  const allCardTokens = [...cardTokenSet, ...fromSideTokens, ...toSideTokens];
+  const bankHint = detectBankName(normalized, allCardTokens, counterpartyHint);
 
   /* ---------- ۷) مبلغ اصلی (با فالبک بدون برچسب) ---------- */
   let amount = labeledAmount;
