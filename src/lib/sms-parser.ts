@@ -215,12 +215,25 @@ export function parseBankSms(raw: string): ParsedSms {
   };
 
   /* ---------- ۱) مبلغ / کارمزد / مانده ---------- */
-  // گروه اول: علامت اختیاری قبل از مبلغ («مبلغ:-4,500,000» یعنی برداشت)
-  const mAmount = normalized.match(/مبلغ\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/);
-  const mFee = normalized.match(/کارمزد\s*[:;()\-]*\s*([\d,]{3,})/);
+  // پشتیبانی از انواع پیشوندهای متداول بانکی (مبلغ، انتقال، انتقال+کارمزد، واریز، برداشت، خرید)
+  const mAmount = normalized.match(
+    /(?:مبلغ|انتقال(?:\s*\+\s*کارمزد)?|واریز|برداشت|خرید)\s*[:;()]*\s*([+\-])?\s*([\d,]{3,})/
+  );
+
+  // کارمزد مستقل: فقط در صورتی که بخشی از برچسب «انتقال+کارمزد» نباشد
+  let mFee: RegExpMatchArray | null = null;
+  const feeMatch = normalized.match(/(?:^|[^\p{L}])کارمزد\s*[:;()\-]*\s*([\d,]{3,})/u);
+  if (feeMatch) {
+    const idx = feeMatch.index ?? 0;
+    const before = normalized.slice(Math.max(0, idx - 10), idx);
+    if (!/انتقال\s*\+?/.test(before)) {
+      mFee = feeMatch;
+    }
+  }
+
   const mBalance = normalized.match(/(?:مانده|موجودی)[^;\d]*([\d,]{3,})/);
   mark(mAmount);
-  mark(mFee);
+  if (mFee) mark(mFee);
   mark(mBalance);
 
   const labeledAmount = mAmount ? toNumber(mAmount[2]) : 0;
@@ -445,7 +458,7 @@ export function parseBankSms(raw: string): ParsedSms {
       const beforeWord = normalized.slice(Math.max(0, start - 10), start);
       if (/پیگیری|مرجع|ارجاع|سند/.test(beforeWord)) continue;
       const pure = m[0].replace(/,/g, "");
-      if (pure.length > 11) continue; // احتمالاً شماره پیگیری/مرجع
+      if (pure.length > 15) continue; // شماره کارت ۱۶ رقمی رد می‌شود، اما مبالغ بالای ۱۰ رقم (ریال) پذیرفته می‌شوند
       const v = toNumber(m[0]);
       if (v <= best) continue;
       best = v;
@@ -482,6 +495,8 @@ export function parseBankSms(raw: string): ParsedSms {
       .slice(Math.min(karbarizIdx, amountIdx), Math.max(karbarizIdx, amountIdx))
       .includes(";");
 
+  const isTransferWithFee = mAmount && /انتقال\s*\+\s*کارمزد/.test(mAmount[0]);
+
   let kind: SmsKind = "unknown";
   let fee = 0;
 
@@ -493,8 +508,8 @@ export function parseBankSms(raw: string): ParsedSms {
     // فقط کارمزد برچسب‌خورده → پیامک کارمزد
     kind = "fee";
     amount = labeledFee;
-  } else if (labeledAmount && sameClause) {
-    // «کارمزد … مبلغ …» در یک جمله → پیامک کارمزد
+  } else if (labeledAmount && sameClause && !isTransferWithFee) {
+    // «کارمزد … مبلغ …» در یک جمله (مگر اینکه پیشوند انتقال+کارمزد باشد) → پیامک کارمزد
     kind = "fee";
   } else {
     fee = labeledFee;
