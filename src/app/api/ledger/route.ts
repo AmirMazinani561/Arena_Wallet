@@ -149,6 +149,7 @@ export async function GET(req: Request) {
       });
 
       const exportToken = createSessionToken({ id: session.userId, username: session.username });
+      const defaultPdfFileName = `صورت_حساب_${account.name.replace(/[\\/:*?"<>|\s]/g, "_")}_${stamp.replace(/\//g, "-")}`;
 
       const html = `<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -501,7 +502,7 @@ export async function GET(req: Request) {
     }
 
     async function triggerSaveToPdf() {
-      const defaultName = `صورت_حساب_${"${account.name.replace(/[\\/:*?"<>|\s]/g, "_")}"}_${"${stamp.replace(/\//g, "-")}"}`;
+      const defaultName = "${defaultPdfFileName}";
       let chosenName = prompt("نام فایل PDF را وارد فرمایید:", defaultName);
       if (chosenName === null) return; // کاربر انصراف داد
       chosenName = chosenName.trim().replace(/[\\/:*?"<>|]/g, "_") || defaultName;
