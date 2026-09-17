@@ -155,95 +155,93 @@ export function CreateAccountModal({
             </div>
           )}
 
-          {/* Type Selector if not editing */}
-          {!editAccount && (
-            <div>
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">نوع حساب</label>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 text-xs font-medium">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("bank");
-                    setIsParent(false);
-                  }}
-                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    type === "bank"
-                      ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  <Landmark className="w-4 h-4" />
-                  <span>بانک</span>
-                </button>
+          {/* Type Selector */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">نوع حساب</label>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => {
+                  setType("bank");
+                  setIsParent(false);
+                }}
+                className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                  type === "bank"
+                    ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <Landmark className="w-4 h-4" />
+                <span>بانک</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("cash");
-                    setIsParent(false);
-                  }}
-                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    type === "cash"
-                      ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  <Wallet className="w-4 h-4" />
-                  <span>صندوق</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setType("cash");
+                  setIsParent(false);
+                }}
+                className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                  type === "cash"
+                    ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <Wallet className="w-4 h-4" />
+                <span>صندوق</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("person");
-                    setIsParent(false);
-                  }}
-                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    type === "person"
-                      ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span>شخص</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setType("person");
+                  setIsParent(false);
+                }}
+                className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                  type === "person"
+                    ? "bg-sky-500 text-white border-sky-500 shadow-md shadow-sky-200"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>شخص</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("expense");
-                    setIsParent(false);
-                    setParentId("");
-                  }}
-                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    type === "expense"
-                      ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-200"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  <ArrowDownRight className="w-4 h-4" />
-                  <span>هزینه</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setType("expense");
+                  setIsParent(false);
+                  setParentId("");
+                }}
+                className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                  type === "expense"
+                    ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-200"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <ArrowDownRight className="w-4 h-4" />
+                <span>هزینه</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("income");
-                    setIsParent(false);
-                    setParentId("");
-                  }}
-                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                    type === "income"
-                      ? "bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-200"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  <span>درآمد</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setType("income");
+                  setIsParent(false);
+                  setParentId("");
+                }}
+                className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                  type === "income"
+                    ? "bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-200"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                <span>درآمد</span>
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Name Field */}
           <div>
