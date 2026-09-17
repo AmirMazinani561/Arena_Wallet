@@ -105,6 +105,11 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
   };
 
   const handleExportCsv = () => {
+    const todayStr = buildShamsi(today.jy, today.jm, today.jd).replace(/\//g, "-");
+    const defaultName = `صورت_حساب_${account.name.replace(/[\\/:*?"<>|\s]/g, "_")}_${todayStr}`;
+    const chosenName = prompt("نام فایل اکسل را وارد فرمایید:", defaultName);
+    if (chosenName === null) return; // کاربر انصراف داد
+
     const p = new URLSearchParams();
     p.set("accountId", account.id);
     p.set("limit", "10000");
@@ -114,6 +119,9 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
       p.set("endDate", endDate);
     }
     p.set("format", "csv");
+    if (chosenName.trim()) {
+      p.set("fileName", chosenName.trim());
+    }
     window.location.href = `/api/ledger?${p.toString()}`;
   };
 
