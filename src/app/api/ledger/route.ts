@@ -150,7 +150,7 @@ export async function GET(req: Request) {
   <title>صورت‌حساب دفتر معین - ${account.name}</title>
   <script src="/js/html2pdf.bundle.min.js"></script>
   <style>
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: A4 portrait; margin: 8mm; }
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
@@ -316,20 +316,21 @@ export async function GET(req: Request) {
       border: 1px solid #e2e8f0;
       border-radius: 8px;
     }
-    table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
     th {
       background: #f1f5f9;
       color: #334155;
       font-weight: 600;
       text-align: right;
-      padding: 7px 8px;
+      padding: 9px 10px;
       border: 1px solid #e2e8f0;
       white-space: nowrap;
     }
     td {
-      padding: 6px 8px;
+      padding: 8px 10px;
       border: 1px solid #e2e8f0;
       color: #334155;
+      vertical-align: middle;
     }
     tr:nth-child(even) td { background: #fafafa; }
     .text-center { text-align: center; }
@@ -340,8 +341,8 @@ export async function GET(req: Request) {
       .no-print { display: none !important; }
       .page-container { border: none !important; box-shadow: none !important; padding: 0 !important; }
       .table-wrapper { overflow: visible !important; border: none !important; }
-      table { min-width: 100% !important; width: 100% !important; page-break-inside: auto; font-size: 9px; }
-      th, td { padding: 5px 6px !important; }
+      table { width: 100% !important; page-break-inside: auto; font-size: 10.5px; }
+      th, td { padding: 7px 8px !important; }
       tr { page-break-inside: avoid; page-break-after: auto; }
       .stats { grid-template-columns: repeat(4, 1fr) !important; }
     }
@@ -404,35 +405,45 @@ export async function GET(req: Request) {
       <table>
         <thead>
           <tr>
-            <th class="text-center" style="width: 35px;">ردیف</th>
-            <th style="width: 75px;">تاریخ شمسی</th>
-            <th style="width: 140px;">طرف حساب</th>
-            <th style="width: 100px;" class="text-left">واریز (بدهکار)</th>
-            <th style="width: 100px;" class="text-left">برداشت (بستانکار)</th>
-            <th style="width: 65px;" class="text-left">کارمزد</th>
-            <th style="width: 110px;" class="text-left">مانده حساب (ریال)</th>
-            <th style="min-width: 160px;">شرح تراکنش</th>
-            <th style="width: 80px;" class="text-center">شماره پیگیری</th>
+            <th style="width: 28%;">تاریخ / مبدأ و مقصد</th>
+            <th>شرح تراکنش</th>
+            <th style="width: 22%;" class="text-left">مبلغ (ریال)</th>
+            <th style="width: 20%;" class="text-left">مانده (ریال)</th>
           </tr>
         </thead>
         <tbody>
           ${result.rows
-            .map((r, idx) => {
+            .map((r) => {
               const isIn = r.direction === "in";
               const cp = [r.counterpartyName, r.counterpartyParentName ? `(${r.counterpartyParentName})` : null]
                 .filter(Boolean)
                 .join(" ");
 
+              let partiesLabel = "";
+              if (cp) {
+                partiesLabel = isIn ? `از: ${cp}` : `به: ${cp}`;
+              } else {
+                partiesLabel = isIn ? `واریز به ${account.name}` : `برداشت از ${account.name}`;
+              }
+
+              const amountColor = isIn ? "#16a34a" : "#dc2626";
+              const amountSign = isIn ? "+" : "-";
+
               return `<tr>
-                <td class="text-center nowrap">${formatNum(idx + 1)}</td>
-                <td class="nowrap">${r.shamsiDate || "-"}</td>
-                <td>${cp || "-"}</td>
-                <td class="text-left nowrap" style="color: #16a34a; font-weight: 600;">${isIn ? formatNum(r.amount) : "-"}</td>
-                <td class="text-left nowrap" style="color: #dc2626; font-weight: 600;">${!isIn ? formatNum(r.amount) : "-"}</td>
-                <td class="text-left nowrap">${r.fee ? formatNum(r.fee) : "-"}</td>
-                <td class="text-left nowrap" style="font-weight: bold; background: #f8fafc;">${formatNum(r.balanceAfter)}</td>
-                <td>${r.description || "-"}</td>
-                <td class="text-center nowrap">${r.trackingNumber || "-"}</td>
+                <td>
+                  <div style="font-weight: 600; color: #0f172a; white-space: nowrap;">${r.shamsiDate || "-"}</div>
+                  <div style="font-size: 9.5px; color: #64748b; margin-top: 3px;">${partiesLabel}</div>
+                </td>
+                <td>
+                  <div style="color: #1e293b; line-height: 1.4;">${r.description || "-"}</div>
+                  ${r.fee ? `<div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">کارمزد: ${formatNum(r.fee)} ریال</div>` : ""}
+                </td>
+                <td class="text-left nowrap" style="color: ${amountColor}; font-weight: 700; font-size: 11.5px;">
+                  ${amountSign}${formatNum(r.amount)}
+                </td>
+                <td class="text-left nowrap" style="font-weight: 700; color: #0f172a; background: #f8fafc; font-size: 11.5px;">
+                  ${formatNum(r.balanceAfter)}
+                </td>
               </tr>`;
             })
             .join("")}
@@ -499,7 +510,7 @@ export async function GET(req: Request) {
             filename: cleanTitle + ".pdf",
             image: { type: "jpeg", quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
-            jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+            jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           };
 
           const pdfBlob = await html2pdf().set(opt).from(element).outputPdf("blob");
