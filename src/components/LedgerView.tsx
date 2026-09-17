@@ -216,20 +216,18 @@ export function LedgerView({ account, allAccounts, onBack, onEditTx, reloadToken
         <button
           type="button"
           onClick={handleExportCsv}
-          className="px-2.5 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition shadow-sm"
+          className="px-2.5 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-2xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm whitespace-nowrap"
           title="خروجی اکسل این صورت‌حساب"
         >
-          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black tracking-wider">Excel</span>
-          <span className="hidden sm:inline">اکسل</span>
+          <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-black tracking-wider">EX</span>
         </button>
         <button
           type="button"
           onClick={handlePrintPdf}
-          className="px-2.5 py-2 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-2xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition shadow-sm"
+          className="px-2.5 py-2 bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300 rounded-2xl text-xs font-bold flex items-center justify-center shrink-0 transition shadow-sm whitespace-nowrap"
           title="چاپ یا ذخیره به عنوان PDF"
         >
           <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-black tracking-wider">PDF</span>
-          <span className="hidden sm:inline">پی‌دی‌اف</span>
         </button>
       </div>
 
