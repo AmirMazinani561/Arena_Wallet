@@ -104,6 +104,18 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
     );
   }, [currentCategories, categorySearch]);
 
+  const budgetedExpenses = useMemo(() => {
+    return expenseReport.filter((c) => (c.monthlyBudget || 0) > 0);
+  }, [expenseReport]);
+
+  const totalMonthlyBudget = useMemo(() => {
+    return budgetedExpenses.reduce((sum, c) => sum + (c.monthlyBudget || 0), 0);
+  }, [budgetedExpenses]);
+
+  const totalBudgetedSpent = useMemo(() => {
+    return budgetedExpenses.reduce((sum, c) => sum + c.total, 0);
+  }, [budgetedExpenses]);
+
   const presets = [
     { key: "this_month", label: "این ماه" },
     { key: "prev_month", label: "ماه قبل" },
@@ -276,6 +288,53 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
         </button>
       </div>
 
+      {/* پایش و کنترل سقف بودجه ماهانه */}
+      {reportType === "expense" && budgetedExpenses.length > 0 && (
+        <div className="p-4 rounded-3xl bg-gradient-to-br from-amber-500/10 via-amber-50/50 to-orange-50/40 border border-amber-200/80 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-sm shadow-amber-500/20">
+                🎯
+              </span>
+              <div>
+                <div className="text-xs font-bold text-slate-800">کنترل بودجه ماهانه هزینه‌ها</div>
+                <div className="text-[10px] text-slate-500">
+                  {budgetedExpenses.length} سرفصل دارای سقف بودجه
+                </div>
+              </div>
+            </div>
+            <div className="text-left">
+              <div className="text-xs font-black text-slate-900 dir-ltr">
+                {totalMonthlyBudget > 0 ? Math.round((totalBudgetedSpent / totalMonthlyBudget) * 100) : 0}٪
+              </div>
+              <div className="text-[9px] text-slate-400">کل مصرف</div>
+            </div>
+          </div>
+
+          {/* نوار کلی بودجه */}
+          <div className="space-y-1">
+            <div className="w-full bg-slate-200/70 h-2.5 rounded-full overflow-hidden p-0.5">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  totalBudgetedSpent > totalMonthlyBudget
+                    ? "bg-rose-500"
+                    : totalBudgetedSpent >= totalMonthlyBudget * 0.8
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+                }`}
+                style={{
+                  width: `${Math.min(100, Math.max(3, totalMonthlyBudget > 0 ? (totalBudgetedSpent / totalMonthlyBudget) * 100 : 0))}%`,
+                }}
+              />
+            </div>
+            <div className="flex justify-between items-center text-[10px] text-slate-500 pt-0.5 font-medium">
+              <span>مصرف‌شده: {formatMoney(totalBudgetedSpent)} ریال</span>
+              <span>سقف کل: {formatMoney(totalMonthlyBudget)} ریال</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* جستجو در گزارش */}
       <div className="relative">
         <input
@@ -300,6 +359,11 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
           filteredCategories.map((parent) => {
             const isExpanded = expandedParents[parent.id] ?? true;
             const percent = parseFloat(parent.percentage) || 0;
+            const hasBudget = (parent.monthlyBudget || 0) > 0;
+            const budgetRatio = hasBudget ? parent.total / (parent.monthlyBudget || 1) : 0;
+            const budgetPercent = Math.round(budgetRatio * 100);
+            const isOverBudget = budgetPercent > 100;
+            const isNearBudget = budgetPercent >= 80 && !isOverBudget;
 
             return (
               <div key={parent.id} className="ios-card overflow-hidden">
@@ -317,8 +381,25 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
                     </div>
                     <div className="truncate">
                       <div className="text-xs font-bold text-slate-800 truncate">{parent.name}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {parent.subcategories.length} زیرمجموعه • {parent.percentage}٪ از کل
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>{parent.subcategories.length} زیرمجموعه • {parent.percentage}٪ از کل</span>
+                        {hasBudget && (
+                          <span
+                            className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold ${
+                              isOverBudget
+                                ? "bg-rose-100 text-rose-700"
+                                : isNearBudget
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}
+                          >
+                            {isOverBudget
+                              ? `⚠️ اضافه بودجه (${budgetPercent}٪)`
+                              : isNearBudget
+                              ? `⚡ نزدیک سقف (${budgetPercent}٪)`
+                              : `✓ بودجه: ${budgetPercent}٪`}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -354,11 +435,43 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
                 <div className="w-full bg-slate-100 h-1.5">
                   <div
                     className={`h-1.5 transition-all duration-500 ${
-                      reportType === "expense" ? "bg-rose-500" : "bg-emerald-500"
+                      hasBudget
+                        ? isOverBudget
+                          ? "bg-rose-500"
+                          : isNearBudget
+                          ? "bg-amber-500"
+                          : "bg-emerald-500"
+                        : reportType === "expense"
+                        ? "bg-rose-500"
+                        : "bg-emerald-500"
                     }`}
-                    style={{ width: `${Math.min(100, Math.max(1, percent))}%` }}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(1, hasBudget ? budgetPercent : percent)
+                      )}%`,
+                    }}
                   />
                 </div>
+
+                {hasBudget && (
+                  <div className="px-3.5 py-2 bg-amber-50/30 text-[10px] text-slate-600 flex justify-between items-center border-t border-amber-100/50 font-medium">
+                    <span>سقف بودجه ماهانه: {formatMoney(parent.monthlyBudget || 0)} ریال</span>
+                    <span
+                      className={
+                        isOverBudget
+                          ? "text-rose-600 font-bold"
+                          : isNearBudget
+                          ? "text-amber-700 font-bold"
+                          : "text-emerald-700 font-bold"
+                      }
+                    >
+                      {isOverBudget
+                        ? `اضافه هزینه: ${formatMoney(parent.total - (parent.monthlyBudget || 0))} ریال`
+                        : `مانده بودجه: ${formatMoney((parent.monthlyBudget || 0) - parent.total)} ریال`}
+                    </span>
+                  </div>
+                )}
 
                 {isExpanded && (
                   <div className="p-3 bg-white space-y-2 divide-y divide-slate-100">

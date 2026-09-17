@@ -137,6 +137,8 @@ export async function POST(req: Request) {
     const numInitial = Number(initialBalance);
     const validInitial = Number.isFinite(numInitial) ? numInitial : 0;
     const cleanDetail = sanitizeString(detailInfo, 250);
+    const numBudget = body.monthlyBudget !== undefined ? Number(body.monthlyBudget) : 0;
+    const validBudget = Number.isFinite(numBudget) && numBudget > 0 ? numBudget : 0;
 
     const account = await createAccount({
       type,
@@ -146,6 +148,7 @@ export async function POST(req: Request) {
       isParent: Boolean(isParent),
       parentId: parentId || null,
       detailInfo: cleanDetail,
+      monthlyBudget: validBudget,
       icon:
         icon ||
         (type === "bank"
@@ -201,6 +204,8 @@ export async function PUT(req: Request) {
     const cleanDetail = body.detailInfo !== undefined ? sanitizeString(body.detailInfo, 250) : undefined;
     const numInitial = body.initialBalance !== undefined ? Number(body.initialBalance) : undefined;
     const validInitial = numInitial !== undefined && Number.isFinite(numInitial) ? numInitial : undefined;
+    const numBudget = body.monthlyBudget !== undefined ? Number(body.monthlyBudget) : undefined;
+    const validBudget = numBudget !== undefined && Number.isFinite(numBudget) ? (numBudget > 0 ? numBudget : 0) : undefined;
 
     if (cleanName !== undefined || cleanType !== undefined || body.parentId !== undefined) {
       const current = await getAccount(String(id));
@@ -236,6 +241,7 @@ export async function PUT(req: Request) {
       isParent: body.isParent !== undefined ? Boolean(body.isParent) : undefined,
       parentId: body.parentId !== undefined ? body.parentId || null : undefined,
       detailInfo: cleanDetail,
+      monthlyBudget: validBudget,
       icon: body.icon !== undefined ? (sanitizeString(body.icon, 50) || undefined) : undefined,
       color: body.color !== undefined ? (sanitizeString(body.color, 30) || undefined) : undefined,
     });
