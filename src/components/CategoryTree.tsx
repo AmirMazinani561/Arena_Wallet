@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Account } from "@/types";
 import { ChevronDown, Layers, Tag } from "lucide-react";
+import { formatMoney } from "@/lib/date-utils";
 
 export interface CategoryTreeProps {
   /** فقط حساب‌های همان نوع (expense یا income) */
@@ -115,9 +116,14 @@ export function CategoryTree({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-bold text-slate-800 truncate">{parent.name}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {children.length === 0 ? "بدون زیرمجموعه" : `${children.length} زیرمجموعه`}
-                    {parent.isFavorite ? " • ★ منتخب" : ""}
+                  <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
+                    <span>{children.length === 0 ? "بدون زیرمجموعه" : `${children.length} زیرمجموعه`}</span>
+                    {parent.isFavorite ? <span>• ★ منتخب</span> : null}
+                    {parent.monthlyBudget && parent.monthlyBudget > 0 ? (
+                      <span className="text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200/60 font-semibold">
+                        سقف: {formatMoney(parent.monthlyBudget)} ریال
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </button>

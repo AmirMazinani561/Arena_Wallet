@@ -12,6 +12,7 @@ export interface Account {
   icon?: string | null;
   color?: string | null;
   sortOrder?: number;
+  monthlyBudget?: number;
   balance?: number;
   totalFlow?: number;
   createdAt?: string;
@@ -58,6 +59,7 @@ export interface ReportCategory {
   name: string;
   color?: string | null;
   icon?: string | null;
+  monthlyBudget?: number;
   total: number;
   percentage: string;
   subcategories: {

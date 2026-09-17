@@ -38,6 +38,7 @@ export interface AccountRow {
   icon: string | null;
   color: string | null;
   sortOrder: number;
+  monthlyBudget: number;
 }
 
 export interface TransactionRow {
@@ -94,6 +95,8 @@ const DDL_MYSQL = [
      detail_info text NULL,
      icon varchar(64) NULL,
      color varchar(32) NULL,
+     sort_order int NOT NULL DEFAULT 0,
+     monthly_budget double NOT NULL DEFAULT 0,
      created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
      updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -157,6 +160,8 @@ const DDL_POSTGRES = [
      detail_info text,
      icon varchar(64),
      color varchar(32),
+     sort_order integer NOT NULL DEFAULT 0,
+     monthly_budget double precision NOT NULL DEFAULT 0,
      created_at timestamp NOT NULL DEFAULT now(),
      updated_at timestamp NOT NULL DEFAULT now()
    )`,
@@ -272,6 +277,7 @@ async function ensureColumn(table: string, column: string, pgDef: string, myDef:
 async function ensureColumns() {
   await ensureColumn("transactions", "fee", "double precision NOT NULL DEFAULT 0", "double NOT NULL DEFAULT 0");
   await ensureColumn("accounts", "sort_order", "integer NOT NULL DEFAULT 0", "int NOT NULL DEFAULT 0");
+  await ensureColumn("accounts", "monthly_budget", "double precision NOT NULL DEFAULT 0", "double NOT NULL DEFAULT 0");
   // وضعیت تراکنش: active (کامل) یا pending (ثبت‌شده از پیامک، در انتظار تکمیل طرف دوم)
   await ensureColumn("transactions", "status", "varchar(20) NOT NULL DEFAULT 'active'", "varchar(20) NOT NULL DEFAULT 'active'");
   // هش متن پیامک برای جلوگیری از ثبت تکراری
@@ -502,6 +508,7 @@ function mapAccount(r: Record<string, unknown>): AccountRow {
     icon: r.icon ? String(r.icon) : null,
     color: r.color ? String(r.color) : null,
     sortOrder: readNumber(r.sort_order),
+    monthlyBudget: roundMoney(readNumber(r.monthly_budget)),
   };
 }
 
@@ -637,11 +644,12 @@ export async function createAccount(data: {
   detailInfo: string | null;
   icon: string;
   color: string;
+  monthlyBudget?: number;
 }): Promise<AccountRow> {
   const id = `acc_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
   await execute(
-    `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, monthly_budget)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.type,
@@ -653,6 +661,7 @@ export async function createAccount(data: {
       data.detailInfo,
       data.icon,
       data.color,
+      roundMoney(data.monthlyBudget || 0),
     ]
   );
   invalidateAccountsCache();
@@ -673,6 +682,7 @@ export async function updateAccount(
     detailInfo: string | null;
     icon: string;
     color: string;
+    monthlyBudget: number;
   }>
 ): Promise<void> {
   const sets: string[] = [];
@@ -713,6 +723,10 @@ export async function updateAccount(
   if (fields.color !== undefined) {
     sets.push("color = ?");
     params.push(fields.color);
+  }
+  if (fields.monthlyBudget !== undefined) {
+    sets.push("monthly_budget = ?");
+    params.push(roundMoney(fields.monthlyBudget || 0));
   }
 
   if (sets.length === 0) return;
@@ -1368,8 +1382,8 @@ export async function replaceAll(
 
     for (const a of accountsData) {
       await tx.execute(
-        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order, monthly_budget)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           a.id,
           a.type,
@@ -1382,6 +1396,7 @@ export async function replaceAll(
           a.icon || "wallet",
           a.color || "#0284c7",
           a.sortOrder || 0,
+          a.monthlyBudget || 0,
         ]
       );
     }

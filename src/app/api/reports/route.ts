@@ -63,6 +63,7 @@ export async function GET(req: Request) {
             name: parent.name,
             color: parent.color,
             icon: parent.icon,
+            monthlyBudget: parent.monthlyBudget || 0,
             total,
             percentage: periodTotal > 0 ? ((total / periodTotal) * 100).toFixed(1) : "0",
             subcategories,

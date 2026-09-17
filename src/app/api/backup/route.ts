@@ -59,7 +59,7 @@ export async function GET(req: Request) {
 
       for (const a of sortedAccounts) {
         lines.push(
-          `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order) VALUES (` +
+          `INSERT INTO accounts (id, type, name, initial_balance, is_favorite, is_parent, parent_id, detail_info, icon, color, sort_order, monthly_budget) VALUES (` +
             [
               a.id,
               a.type,
@@ -72,6 +72,7 @@ export async function GET(req: Request) {
               a.icon,
               a.color,
               a.sortOrder || 0,
+              a.monthlyBudget || 0,
             ]
               .map(sqlValue)
               .join(", ") +
@@ -475,6 +476,7 @@ export async function POST(req: Request) {
       icon: a.icon ? String(a.icon) : "wallet",
       color: a.color ? String(a.color) : "#0284c7",
       sortOrder: Number(a.sortOrder) || 0,
+      monthlyBudget: Number(a.monthlyBudget) || 0,
     }));
 
     const txData: TransactionRow[] = incomingTxs.map((t: Record<string, unknown>) => ({

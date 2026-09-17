@@ -33,6 +33,7 @@ export const accounts = pgTable(
     icon: varchar("icon", { length: 64 }),
     color: varchar("color", { length: 32 }),
     sortOrder: integer("sort_order").default(0).notNull(),
+    monthlyBudget: doublePrecision("monthly_budget").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

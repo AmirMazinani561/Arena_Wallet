@@ -37,6 +37,7 @@ export function CreateAccountModal({
   const [isParent, setIsParent] = useState(false);
   const [parentId, setParentId] = useState<string>("");
   const [detailInfo, setDetailInfo] = useState("");
+  const [monthlyBudget, setMonthlyBudget] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +52,9 @@ export function CreateAccountModal({
       setIsParent(editAccount.isParent);
       setParentId(editAccount.parentId || "");
       setDetailInfo(editAccount.detailInfo || "");
+      setMonthlyBudget(
+        editAccount.monthlyBudget ? separateThousands(String(editAccount.monthlyBudget)) : ""
+      );
     } else {
       setType(initialType);
       setName("");
@@ -61,6 +65,7 @@ export function CreateAccountModal({
       setIsParent(false);
       setParentId(initialParentId || "");
       setDetailInfo("");
+      setMonthlyBudget("");
     }
     setError(null);
   }, [isOpen, editAccount, initialType, initialParentId]);
@@ -100,6 +105,7 @@ export function CreateAccountModal({
         isParent: type === "income" || type === "expense" ? isParent : false,
         parentId: type === "income" || type === "expense" ? (!isParent ? parentId : null) : null,
         detailInfo: detailInfo.trim() || null,
+        monthlyBudget: type === "expense" ? parseAmount(monthlyBudget) : 0,
       };
 
       const res = await fetch("/api/accounts", {
@@ -364,6 +370,26 @@ export function CreateAccountModal({
                   </select>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* سقف بودجه ماهانه فقط برای سرفصل‌های هزینه */}
+          {type === "expense" && (
+            <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <span>🎯 سقف بودجه ماهانه (ریال)</span>
+                  <span className="text-[10px] font-normal text-amber-600">(اختیاری)</span>
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                با تعیین سقف بودجه، نوار پیشرفت مصرف و هشدارهای هوشمند در گزارشات فعال می‌شود.
+              </p>
+              <AmountInput
+                value={monthlyBudget}
+                onChange={(formatted) => setMonthlyBudget(formatted)}
+                placeholder="مثلاً: ۵۰,۰۰۰,۰۰۰"
+              />
             </div>
           )}
 
