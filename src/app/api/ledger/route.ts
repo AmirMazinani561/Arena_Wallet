@@ -121,11 +121,19 @@ export async function GET(req: Request) {
 
       const tsvContent = rows.map((r) => r.join("\t")).join("\r\n");
       const buffer = Buffer.from("\uFEFF" + tsvContent, "utf16le");
+
+      const rawCustomName = searchParams.get("fileName");
+      const cleanAccountName = account.name.replace(/[\\/:*?"<>|\s]/g, "_");
+      const cleanStamp = stamp.replace(/\//g, "-");
+      const baseName = (rawCustomName ? rawCustomName.trim().replace(/\.csv$/i, "") : `صورت_حساب_${cleanAccountName}_${cleanStamp}`).replace(/[\\/:*?"<>|]/g, "_") || `صورت_حساب_${cleanAccountName}_${cleanStamp}`;
+      const asciiFallback = `ledger_${cleanStamp}.csv`;
+      const utf8FileName = encodeURIComponent(`${baseName}.csv`);
+
       return new Response(buffer, {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-16le",
-          "Content-Disposition": `attachment; filename="ledger_${stamp.replace(/\//g, "-")}.csv"`,
+          "Content-Disposition": `attachment; filename="${asciiFallback}"; filename*=UTF-8''${utf8FileName}`,
         },
       });
     }
@@ -141,13 +149,14 @@ export async function GET(req: Request) {
       });
 
       const exportToken = createSessionToken({ id: session.userId, username: session.username });
+      const defaultPdfFileName = `صورت_حساب_${account.name.replace(/[\\/:*?"<>|\s]/g, "_")}_${stamp.replace(/\//g, "-")}`;
 
       const html = `<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>صورت‌حساب دفتر معین - ${account.name}</title>
+  <title>صورت‌حساب - ${account.name}</title>
   <script src="/js/html2pdf.bundle.min.js"></script>
   <style>
     @page { size: A4 portrait; margin: 8mm; }
@@ -373,11 +382,11 @@ export async function GET(req: Request) {
   <div class="page-container">
     <div class="header">
       <div>
-        <h1 class="title">صورت‌حساب دفتر معین: ${account.name} (${typeLabel})</h1>
+        <h1 class="title">صورت‌حساب: ${account.name}</h1>
         <div class="meta">
           بازه گزارش: ${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}
           ${searchParams.get("query") ? ` | فیلتر جستجو: «${searchParams.get("query")}»` : ""}
-          | تاریخ چاپ: ${stampText} (${stamp})
+          | تاریخ چاپ: ${stamp}
         </div>
       </div>
     </div>
@@ -493,6 +502,12 @@ export async function GET(req: Request) {
     }
 
     async function triggerSaveToPdf() {
+      const defaultName = "${defaultPdfFileName}";
+      let chosenName = prompt("نام فایل PDF را وارد فرمایید:", defaultName);
+      if (chosenName === null) return; // کاربر انصراف داد
+      chosenName = chosenName.trim().replace(/[\\/:*?"<>|]/g, "_") || defaultName;
+      if (!chosenName.toLowerCase().endsWith(".pdf")) chosenName += ".pdf";
+
       const btn = document.getElementById("savePdfBtn");
       const originalText = btn ? btn.innerHTML : "";
       if (btn) {
@@ -501,33 +516,33 @@ export async function GET(req: Request) {
       }
 
       try {
-        const cleanTitle = (document.title || "صورت‌حساب").replace(/[\\/:*?"<>|]/g, "_");
+        const cleanTitle = chosenName.replace(/\.pdf$/i, "");
         const element = document.querySelector(".page-container") || document.body;
 
         if (typeof html2pdf !== "undefined") {
           const opt = {
             margin: [8, 6, 8, 6],
-            filename: cleanTitle + ".pdf",
+            filename: chosenName,
             image: { type: "jpeg", quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           };
 
           const pdfBlob = await html2pdf().set(opt).from(element).outputPdf("blob");
-          const pdfFile = new File([pdfBlob], cleanTitle + ".pdf", { type: "application/pdf" });
+          const pdfFile = new File([pdfBlob], chosenName, { type: "application/pdf" });
 
           // ۱. در آیفون: ارسال مستقیم فایل PDF تا گزینه Save to Files ظاهر شود
           if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
             await navigator.share({
               files: [pdfFile],
-              title: document.title,
+              title: cleanTitle,
             });
           } else {
             // ۲. دانلود مستقیم فایل PDF
             const blobUrl = URL.createObjectURL(pdfBlob);
             const a = document.createElement("a");
             a.href = blobUrl;
-            a.download = cleanTitle + ".pdf";
+            a.download = chosenName;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
