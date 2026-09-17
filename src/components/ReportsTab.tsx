@@ -13,6 +13,8 @@ import {
   ChevronUp,
   Search,
   ExternalLink,
+  FileSpreadsheet,
+  Printer,
 } from "lucide-react";
 import { ShamsiDatePicker } from "./ShamsiDatePicker";
 
@@ -111,13 +113,51 @@ export function ReportsTab({ onFilterTransactionsByAccount, refreshKey = 0 }: Pr
     { key: "custom", label: "بازه دلخواه" },
   ];
 
+  const handleExportCsv = () => {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    params.set("format", "csv");
+    window.location.href = `/api/reports?${params.toString()}`;
+  };
+
+  const handlePrintPdf = () => {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    params.set("format", "print");
+    window.open(`/api/reports?${params.toString()}`, "_blank");
+  };
+
   return (
     <div className="space-y-4 pb-6 animate-in fade-in duration-150">
-      <div>
-        <h2 className="text-base font-bold text-slate-800">گزارشات مالی</h2>
-        <p className="text-[11px] text-slate-400">
-          تحلیل سرفصل‌ها و زیرمجموعه‌ها بر اساس تاریخ شمسی (مبالغ به ریال)
-        </p>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 className="text-base font-bold text-slate-800">گزارشات مالی</h2>
+          <p className="text-[11px] text-slate-400">
+            تحلیل سرفصل‌ها و زیرمجموعه‌ها بر اساس تاریخ شمسی (مبالغ به ریال)
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm"
+            title="خروجی اکسل گزارش تحلیلی این بازه"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">خروجی</span> اکسل
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintPdf}
+            className="px-2.5 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition shadow-sm"
+            title="چاپ یا ذخیره به عنوان PDF گزارش تحلیلی"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>چاپ / PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* فیلتر تاریخ */}
