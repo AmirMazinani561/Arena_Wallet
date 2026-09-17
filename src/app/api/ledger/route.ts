@@ -72,23 +72,19 @@ export async function GET(req: Request) {
         ? "سرفصل هزینه"
         : "سرفصل درآمد";
 
-    /* ---------- خروجی اکسل (CSV UTF-8 BOM با تفکیک استاندارد ستون‌ها) ---------- */
+    /* ---------- خروجی اکسل (UTF-16LE با تب و BOM استاندارد مایکروسافت اکسل) ---------- */
     if (format === "csv") {
-      const csvRows: string[] = [];
-      csvRows.push(
-        [`"صورت‌حساب دفتر معین"`, `"${account.name.replace(/"/g, '""')}"`].join(","),
-        [`"نوع حساب"`, `"${typeLabel}"`].join(","),
-        [`"تاریخ چاپ (شمسی)"`, `"${stamp}"`].join(","),
-        [`"بازه زمانی"`, `"${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}"`].join(","),
-        [`"مانده ابتدای دوره (ریال)"`, `"${result.openingBalance}"`].join(","),
-        [`"مانده انتهای دوره (ریال)"`, `"${result.closingBalance}"`].join(","),
-        [`"تعداد کل تراکنش‌ها"`, `"${result.total}"`].join(","),
-        ""
-      );
-
-      // ترتیب دقیق ستون‌ها مطابق درخواست کاربر:
-      // ردیف - تاریخ شمسی - طرف حساب - واریز (بدهکار) - برداشت (بستانکار) - کارمزد - مانده حساب - شرح تراکنش - شماره پیگیری
-      csvRows.push(
+      const clean = (v: unknown) => String(v ?? "").replace(/[\t\r\n]/g, " ").trim();
+      const rows: string[][] = [
+        ["صورت‌حساب دفتر معین", clean(account.name)],
+        ["نوع حساب", clean(typeLabel)],
+        ["تاریخ چاپ (شمسی)", clean(stamp)],
+        ["بازه زمانی", `${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}`],
+        ["مانده ابتدای دوره (ریال)", String(result.openingBalance)],
+        ["مانده انتهای دوره (ریال)", String(result.closingBalance)],
+        ["تعداد کل تراکنش‌ها", String(result.total)],
+        [],
+        // ترتیب دقیق ستون‌ها مطابق درخواست کاربر:
         [
           "ردیف",
           "تاریخ شمسی",
@@ -96,13 +92,11 @@ export async function GET(req: Request) {
           "واریز (بدهکار)",
           "برداشت (بستانکار)",
           "کارمزد",
-          "مانده حساب",
+          "مانده حساب (ریال)",
           "شرح تراکنش",
           "شماره پیگیری",
-        ]
-          .map((c) => `"${c}"`)
-          .join(",")
-      );
+        ],
+      ];
 
       result.rows.forEach((r, idx) => {
         const isIn = r.direction === "in";
@@ -112,29 +106,25 @@ export async function GET(req: Request) {
           .filter(Boolean)
           .join(" ");
 
-        csvRows.push(
-          [
-            String(idx + 1),
-            r.shamsiDate || "",
-            cp,
-            String(inflow),
-            String(outflow),
-            String(r.fee || 0),
-            String(r.balanceAfter),
-            r.description || "",
-            r.trackingNumber || "",
-          ]
-            .map((c) => `"${String(c).replace(/"/g, '""')}"`)
-            .join(",")
-        );
+        rows.push([
+          String(idx + 1),
+          r.shamsiDate || "",
+          clean(cp),
+          String(inflow),
+          String(outflow),
+          String(r.fee || 0),
+          String(r.balanceAfter),
+          clean(r.description || ""),
+          clean(r.trackingNumber || ""),
+        ]);
       });
 
-      // شناسه \uFEFF برای سازگاری فارسی و sep=, برای تفکیک خودکار و قطعی ستون‌ها در مایکروسافت اکسل
-      const csvContent = "\uFEFFsep=,\r\n" + csvRows.join("\r\n");
-      return new Response(csvContent, {
+      const tsvContent = rows.map((r) => r.join("\t")).join("\r\n");
+      const buffer = Buffer.from("\uFEFF" + tsvContent, "utf16le");
+      return new Response(buffer, {
         status: 200,
         headers: {
-          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Type": "text/csv; charset=utf-16le",
           "Content-Disposition": `attachment; filename="ledger_${stamp.replace(/\//g, "-")}.csv"`,
         },
       });
@@ -143,7 +133,6 @@ export async function GET(req: Request) {
     /* ---------- خروجی چاپی استاندارد / ذخیره به عنوان PDF برای همین حساب ---------- */
     if (format === "print" || format === "pdf") {
       const formatNum = (n: number) => Number(n || 0).toLocaleString("fa-IR");
-
       let totalIn = 0;
       let totalOut = 0;
       result.rows.forEach((r) => {
@@ -158,14 +147,14 @@ export async function GET(req: Request) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>صورت‌حساب دفتر معین - ${account.name}</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;
-      background: #ffffff;
+      background: #f8fafc;
       color: #0f172a;
       margin: 0;
-      padding: 16px;
+      padding: 12px;
       font-size: 11px;
       line-height: 1.5;
     }
@@ -177,8 +166,8 @@ export async function GET(req: Request) {
       border: 1px solid #bae6fd;
       border-radius: 12px;
       padding: 12px 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.1);
+      margin-bottom: 14px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12);
     }
     .action-bar-inner {
       display: flex;
@@ -187,30 +176,32 @@ export async function GET(req: Request) {
     }
     .print-btn {
       width: 100%;
-      padding: 12px 20px;
+      padding: 14px 22px;
       background: #0284c7;
       color: #fff;
       font-family: inherit;
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: bold;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
       text-align: center;
       box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
-    .print-btn:active { background: #0369a1; }
+    .print-btn:active { background: #0369a1; transform: scale(0.99); }
     .ios-hint {
-      font-size: 10px;
+      font-size: 10.5px;
       color: #0369a1;
       line-height: 1.5;
       background: #e0f2fe;
-      padding: 6px 10px;
-      border-radius: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
     }
     @media (min-width: 640px) {
+      body { padding: 16px; }
       .action-bar-inner {
         flex-direction: row;
         align-items: center;
@@ -218,152 +209,185 @@ export async function GET(req: Request) {
       }
       .print-btn { width: auto; }
     }
+    .page-container {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 2px solid #0284c7;
-      padding-bottom: 12px;
-      margin-bottom: 14px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
     .title { font-size: 16px; font-weight: bold; color: #0369a1; margin: 0; }
     .meta { font-size: 10px; color: #64748b; margin-top: 4px; }
     .stats {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 8px;
       margin-bottom: 14px;
+    }
+    @media (min-width: 640px) {
+      .stats {
+        grid-template-columns: repeat(4, 1fr);
+      }
     }
     .stat-card {
       padding: 8px 10px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
-      border-radius: 6px;
+      border-radius: 8px;
       text-align: center;
     }
-    .stat-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
-    .stat-val { font-size: 12.5px; font-weight: bold; }
+    .stat-label { font-size: 9.5px; color: #64748b; margin-bottom: 3px; white-space: nowrap; }
+    .stat-val { font-size: 12px; font-weight: bold; }
     .val-neutral { color: #0284c7; }
     .val-in { color: #16a34a; }
     .val-out { color: #dc2626; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5px; }
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 10px; }
     th {
       background: #f1f5f9;
       color: #334155;
       font-weight: 600;
       text-align: right;
-      padding: 6px 7px;
+      padding: 7px 8px;
       border: 1px solid #e2e8f0;
+      white-space: nowrap;
     }
     td {
-      padding: 5px 7px;
+      padding: 6px 8px;
       border: 1px solid #e2e8f0;
       color: #334155;
     }
     tr:nth-child(even) td { background: #fafafa; }
     .text-center { text-align: center; }
     .text-left { text-align: left; }
+    .nowrap { white-space: nowrap; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #fff; }
       .no-print { display: none !important; }
-      table { page-break-inside: auto; }
+      .page-container { border: none !important; box-shadow: none !important; padding: 0 !important; }
+      .table-wrapper { overflow: visible !important; border: none !important; }
+      table { min-width: 100% !important; width: 100% !important; page-break-inside: auto; font-size: 9px; }
+      th, td { padding: 5px 6px !important; }
       tr { page-break-inside: avoid; page-break-after: auto; }
+      .stats { grid-template-columns: repeat(4, 1fr) !important; }
     }
   </style>
 </head>
 <body>
   <div class="no-print action-bar">
     <div class="action-bar-inner">
-      <button class="print-btn" onclick="window.print()" ontouchend="window.print()">
+      <button id="printBtn" class="print-btn" type="button" onclick="triggerPrint()">
         🖨️ چاپ / ذخیره به عنوان PDF
       </button>
       <div class="ios-hint">
-        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه چاپ، در پیش‌نمایش پرینت با دو انگشت روی برگه زوم کنید (Pinch-Out) تا فایل PDF شود، سپس دکمه اشتراک <b>Share</b> را زده و <b>Save to Files</b> را انتخاب فرمایید.
+        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه بالا، در پنجره پرینت با دو انگشت روی برگه زوم به بیرون کنید (Pinch-Out) تا سند PDF شود، سپس با انتخاب <b>Share</b> و <b>Save to Files</b> آن را ذخیره فرمایید.
       </div>
     </div>
   </div>
 
-  <div class="header">
-    <div>
-      <h1 class="title">صورت‌حساب دفتر معین: ${account.name} (${typeLabel})</h1>
-      <div class="meta">
-        بازه گزارش: ${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}
-        ${searchParams.get("query") ? ` | فیلتر جستجو: «${searchParams.get("query")}»` : ""}
-        | تاریخ چاپ: ${stampText} (${stamp})
+  <div class="page-container">
+    <div class="header">
+      <div>
+        <h1 class="title">صورت‌حساب دفتر معین: ${account.name} (${typeLabel})</h1>
+        <div class="meta">
+          بازه گزارش: ${searchParams.get("startDate") || "ابتدا"} تا ${searchParams.get("endDate") || "اکنون"}
+          ${searchParams.get("query") ? ` | فیلتر جستجو: «${searchParams.get("query")}»` : ""}
+          | تاریخ چاپ: ${stampText} (${stamp})
+        </div>
       </div>
     </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">مانده ابتدای دوره</div>
+        <div class="stat-val val-neutral">${formatNum(result.openingBalance)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">${isAsset ? "مجموع واریزها (بدهکار)" : "گردش ورودی"}</div>
+        <div class="stat-val val-in">${formatNum(totalIn)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">${isAsset ? "مجموع برداشت‌ها (بستانکار)" : "گردش خروجی"}</div>
+        <div class="stat-val val-out">${formatNum(totalOut)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">مانده پایانی انتهای دوره</div>
+        <div class="stat-val val-neutral" style="font-size: 13px;">${formatNum(result.closingBalance)} ریال</div>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 35px;">ردیف</th>
+            <th style="width: 75px;">تاریخ شمسی</th>
+            <th style="width: 140px;">طرف حساب</th>
+            <th style="width: 100px;" class="text-left">واریز (بدهکار)</th>
+            <th style="width: 100px;" class="text-left">برداشت (بستانکار)</th>
+            <th style="width: 65px;" class="text-left">کارمزد</th>
+            <th style="width: 110px;" class="text-left">مانده حساب (ریال)</th>
+            <th style="min-width: 160px;">شرح تراکنش</th>
+            <th style="width: 80px;" class="text-center">شماره پیگیری</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${result.rows
+            .map((r, idx) => {
+              const isIn = r.direction === "in";
+              const cp = [r.counterpartyName, r.counterpartyParentName ? `(${r.counterpartyParentName})` : null]
+                .filter(Boolean)
+                .join(" ");
+
+              return `<tr>
+                <td class="text-center nowrap">${formatNum(idx + 1)}</td>
+                <td class="nowrap">${r.shamsiDate || "-"}</td>
+                <td>${cp || "-"}</td>
+                <td class="text-left nowrap" style="color: #16a34a; font-weight: 600;">${isIn ? formatNum(r.amount) : "-"}</td>
+                <td class="text-left nowrap" style="color: #dc2626; font-weight: 600;">${!isIn ? formatNum(r.amount) : "-"}</td>
+                <td class="text-left nowrap">${r.fee ? formatNum(r.fee) : "-"}</td>
+                <td class="text-left nowrap" style="font-weight: bold; background: #f8fafc;">${formatNum(r.balanceAfter)}</td>
+                <td>${r.description || "-"}</td>
+                <td class="text-center nowrap">${r.trackingNumber || "-"}</td>
+              </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
   </div>
-
-  <div class="stats">
-    <div class="stat-card">
-      <div class="stat-label">مانده ابتدای دوره</div>
-      <div class="stat-val val-neutral">${formatNum(result.openingBalance)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">${isAsset ? "مجموع واریزها (بدهکار)" : "گردش ورودی"}</div>
-      <div class="stat-val val-in">${formatNum(totalIn)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">${isAsset ? "مجموع برداشت‌ها (بستانکار)" : "گردش خروجی"}</div>
-      <div class="stat-val val-out">${formatNum(totalOut)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">مانده پایانی انتهای دوره</div>
-      <div class="stat-val val-neutral" style="font-size: 14px;">${formatNum(result.closingBalance)} ریال</div>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th class="text-center" style="width: 32px;">ردیف</th>
-        <th style="width: 72px;">تاریخ شمسی</th>
-        <th style="width: 110px;">طرف حساب</th>
-        <th style="width: 85px;">واریز (بدهکار)</th>
-        <th style="width: 85px;">برداشت (بستانکار)</th>
-        <th style="width: 55px;">کارمزد</th>
-        <th style="width: 95px;" class="text-left">مانده حساب (ریال)</th>
-        <th>شرح تراکنش</th>
-        <th style="width: 75px;">شماره پیگیری</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${result.rows
-        .map((r, idx) => {
-          const isIn = r.direction === "in";
-          const cp = [r.counterpartyName, r.counterpartyParentName ? `(${r.counterpartyParentName})` : null]
-            .filter(Boolean)
-            .join(" ");
-
-          return `<tr>
-            <td class="text-center">${formatNum(idx + 1)}</td>
-            <td>${r.shamsiDate || "-"}</td>
-            <td>${cp || "-"}</td>
-            <td style="color: #16a34a; font-weight: 600;">${isIn ? formatNum(r.amount) : "-"}</td>
-            <td style="color: #dc2626; font-weight: 600;">${!isIn ? formatNum(r.amount) : "-"}</td>
-            <td>${r.fee ? formatNum(r.fee) : "-"}</td>
-            <td class="text-left" style="font-weight: bold; background: #f8fafc;">${formatNum(r.balanceAfter)}</td>
-            <td>${r.description || "-"}</td>
-            <td>${r.trackingNumber || "-"}</td>
-          </tr>`;
-        })
-        .join("")}
-    </tbody>
-  </table>
 
   <script>
-    // اجرای هوشمند پرینت در دسکتاپ پس از بارگذاری
+    function triggerPrint() {
+      window.print();
+    }
     window.addEventListener("DOMContentLoaded", () => {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (!isMobile) {
         setTimeout(() => {
           window.print();
-        }, 400);
+        }, 300);
       }
     });
   </script>
 </body>
 </html>`;
+
 
       return new Response(html, {
         status: 200,

@@ -92,103 +92,85 @@ export async function GET(req: Request) {
     const stamp = shamsiNow.formatted;
     const stampText = shamsiNow.fullText;
 
-    /* ---------- خروجی فایل اکسل (CSV با پشتیبانی کامل UTF-8 BOM فارسی و تفکیک ستون‌ها) ---------- */
+    /* ---------- خروجی فایل اکسل (TSV تب‌بندی شده با انکودینگ UTF-16LE و BOM جهت نمایش ۱۰۰٪ استاندارد در اکسل ویندوز و مک) ---------- */
     if (format === "csv") {
-      const csvRows: string[] = [];
+      const clean = (str: string | null | undefined) =>
+        (str || "").replace(/\t|\r|\n/g, " ").trim();
 
-      // ۱. خلاصه شاخص‌های مالی دوره
-      csvRows.push(`"گزارش تحلیلی مالی"`);
-      csvRows.push(
-        [`"بازه زمانی"`, `"${startDate || "ابتدا"} تا ${endDate || "اکنون"}"`].join(",")
-      );
-      csvRows.push([`"تاریخ خروجی (شمسی)"`, `"${stamp}"`].join(","));
-      csvRows.push("");
-
-      csvRows.push(
-        [`"شاخص عملکرد"`, `"مبلغ (ریال)"`].join(","),
-        [`"مجموع درآمد دوره"`, `"${agg.periodIncome}"`].join(","),
-        [`"مجموع هزینه دوره"`, `"${agg.periodExpense}"`].join(","),
-        [`"پس‌انداز خالص دوره"`, `"${agg.periodIncome - agg.periodExpense}"`].join(","),
-        [`"مجموع کارمزد پرداختی"`, `"${agg.totalFee}"`].join(","),
-        [`"تعداد کل تراکنش‌ها"`, `"${agg.txCount}"`].join(","),
-        [`"موجودی نقد و بانک (کل)"`, `"${totalBank + totalCash}"`].join(","),
-        [`"مانده خالص اشخاص"`, `"${totalPersonsNet}"`].join(","),
-        ""
-      );
-
-      // ۲. تفکیک هزینه‌ها
-      csvRows.push(`"--- تفکیک سرفصل‌ها و زیرمجموعه‌های هزینه ---"`);
-      csvRows.push(
-        [`"ردیف"`, `"سرفصل هزینه"`, `"زیرمجموعه"`, `"مبلغ (ریال)"`, `"درصد از کل هزینه"`].join(",")
-      );
+      const rows: string[][] = [
+        ["گزارش تحلیلی عملکرد مالی"],
+        ["بازه زمانی", `${startDate || "ابتدا"} تا ${endDate || "اکنون"}`],
+        ["تاریخ خروجی (شمسی)", clean(stamp)],
+        [],
+        ["شاخص عملکرد", "مبلغ (ریال)"],
+        ["مجموع درآمد دوره", String(agg.periodIncome)],
+        ["مجموع هزینه دوره", String(agg.periodExpense)],
+        ["پس‌انداز خالص دوره", String(agg.periodIncome - agg.periodExpense)],
+        ["مجموع کارمزد پرداختی", String(agg.totalFee)],
+        ["تعداد کل تراکنش‌ها", String(agg.txCount)],
+        ["موجودی نقد و بانک (کل)", String(totalBank + totalCash)],
+        ["مانده خالص اشخاص", String(totalPersonsNet)],
+        [],
+        ["--- تفکیک سرفصل‌ها و زیرمجموعه‌های هزینه ---"],
+        ["ردیف", "سرفصل هزینه", "زیرمجموعه", "مبلغ (ریال)", "درصد از کل هزینه"],
+      ];
 
       let expIdx = 1;
       const expenseList = buildReport("expense", agg.periodExpense);
       expenseList.forEach((parent) => {
-        csvRows.push(
-          [
-            String(expIdx++),
-            `"${parent.name.replace(/"/g, '""')}"`,
-            `"[مجموع سرفصل]"`,
-            `"${parent.total}"`,
-            `"${parent.percentage}%"`,
-          ].join(",")
-        );
+        rows.push([
+          String(expIdx++),
+          clean(parent.name),
+          "[مجموع سرفصل]",
+          String(parent.total),
+          `${parent.percentage}%`,
+        ]);
 
         parent.subcategories.forEach((sub) => {
           const subPct = agg.periodExpense > 0 ? ((sub.total / agg.periodExpense) * 100).toFixed(1) : "0";
-          csvRows.push(
-            [
-              "",
-              `"${parent.name.replace(/"/g, '""')}"`,
-              `"${sub.name.replace(/"/g, '""')}"`,
-              `"${sub.total}"`,
-              `"${subPct}%"`,
-            ].join(",")
-          );
+          rows.push([
+            "",
+            clean(parent.name),
+            clean(sub.name),
+            String(sub.total),
+            `${subPct}%`,
+          ]);
         });
       });
 
-      csvRows.push("");
-
-      // ۳. تفکیک درآمدها
-      csvRows.push(`"--- تفکیک سرفصل‌ها و زیرمجموعه‌های درآمد ---"`);
-      csvRows.push(
-        [`"ردیف"`, `"سرفصل درآمد"`, `"زیرمجموعه"`, `"مبلغ (ریال)"`, `"درصد از کل درآمد"`].join(",")
-      );
+      rows.push([]);
+      rows.push(["--- تفکیک سرفصل‌ها و زیرمجموعه‌های درآمد ---"]);
+      rows.push(["ردیف", "سرفصل درآمد", "زیرمجموعه", "مبلغ (ریال)", "درصد از کل درآمد"]);
 
       let incIdx = 1;
       const incomeList = buildReport("income", agg.periodIncome);
       incomeList.forEach((parent) => {
-        csvRows.push(
-          [
-            String(incIdx++),
-            `"${parent.name.replace(/"/g, '""')}"`,
-            `"[مجموع سرفصل]"`,
-            `"${parent.total}"`,
-            `"${parent.percentage}%"`,
-          ].join(",")
-        );
+        rows.push([
+          String(incIdx++),
+          clean(parent.name),
+          "[مجموع سرفصل]",
+          String(parent.total),
+          `${parent.percentage}%`,
+        ]);
 
         parent.subcategories.forEach((sub) => {
           const subPct = agg.periodIncome > 0 ? ((sub.total / agg.periodIncome) * 100).toFixed(1) : "0";
-          csvRows.push(
-            [
-              "",
-              `"${parent.name.replace(/"/g, '""')}"`,
-              `"${sub.name.replace(/"/g, '""')}"`,
-              `"${sub.total}"`,
-              `"${subPct}%"`,
-            ].join(",")
-          );
+          rows.push([
+            "",
+            clean(parent.name),
+            clean(sub.name),
+            String(sub.total),
+            `${subPct}%`,
+          ]);
         });
       });
 
-      const csvContent = "\uFEFFsep=,\r\n" + csvRows.join("\r\n");
-      return new Response(csvContent, {
+      const tsvContent = rows.map((r) => r.join("\t")).join("\r\n");
+      const buffer = Buffer.from("\uFEFF" + tsvContent, "utf16le");
+      return new Response(buffer, {
         status: 200,
         headers: {
-          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Type": "text/csv; charset=utf-16le",
           "Content-Disposition": `attachment; filename="financial_report_${stamp.replace(/\//g, "-")}.csv"`,
         },
       });
@@ -237,28 +219,29 @@ export async function GET(req: Request) {
     }
     .print-btn {
       width: 100%;
-      padding: 12px 20px;
+      padding: 14px 22px;
       background: #0284c7;
       color: #fff;
       font-family: inherit;
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: bold;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
       text-align: center;
       box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
-    .print-btn:active { background: #0369a1; }
+    .print-btn:active { background: #0369a1; transform: scale(0.99); }
     .ios-hint {
-      font-size: 10px;
+      font-size: 10.5px;
       color: #0369a1;
       line-height: 1.5;
       background: #e0f2fe;
-      padding: 6px 10px;
-      border-radius: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
     }
     @media (min-width: 640px) {
       .action-bar-inner {
@@ -267,6 +250,13 @@ export async function GET(req: Request) {
         justify-content: space-between;
       }
       .print-btn { width: auto; }
+    }
+    .page-container {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
     .header {
       display: flex;
@@ -280,15 +270,20 @@ export async function GET(req: Request) {
     .meta { font-size: 10.5px; color: #64748b; margin-top: 4px; }
     .stats {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
       margin-bottom: 16px;
     }
+    @media (min-width: 640px) {
+      .stats {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
     .stat-card {
-      padding: 8px 10px;
+      padding: 10px 12px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
-      border-radius: 6px;
+      border-radius: 8px;
       text-align: center;
     }
     .stat-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
@@ -301,21 +296,29 @@ export async function GET(req: Request) {
       font-size: 13px;
       font-weight: bold;
       color: #1e293b;
-      margin: 14px 0 8px 0;
-      padding-right: 6px;
-      border-right: 3px solid #0284c7;
+      margin: 16px 0 10px 0;
+      padding-right: 8px;
+      border-right: 4px solid #0284c7;
     }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 16px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    table { width: 100%; min-width: 500px; border-collapse: collapse; font-size: 10.5px; }
     th {
       background: #f1f5f9;
       color: #334155;
       font-weight: 600;
       text-align: right;
-      padding: 6px 8px;
+      padding: 8px 10px;
       border: 1px solid #e2e8f0;
     }
     td {
-      padding: 5px 8px;
+      padding: 7px 10px;
       border: 1px solid #e2e8f0;
       color: #334155;
     }
@@ -339,144 +342,155 @@ export async function GET(req: Request) {
     .fill-expense { background: #ef4444; }
     .fill-income { background: #22c55e; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #fff; }
       .no-print { display: none !important; }
-      table { page-break-inside: auto; }
+      .page-container { border: none !important; box-shadow: none !important; padding: 0 !important; }
+      .table-wrapper { overflow: visible !important; border: none !important; margin-bottom: 12px; }
+      table { min-width: 100% !important; width: 100% !important; page-break-inside: auto; font-size: 10px; }
       tr { page-break-inside: avoid; page-break-after: auto; }
+      .stats { grid-template-columns: repeat(4, 1fr) !important; }
     }
   </style>
 </head>
 <body>
   <div class="no-print action-bar">
     <div class="action-bar-inner">
-      <button class="print-btn" onclick="window.print()" ontouchend="window.print()">
+      <button id="printBtn" class="print-btn" type="button" onclick="triggerPrint()">
         🖨️ چاپ / ذخیره به عنوان PDF
       </button>
       <div class="ios-hint">
-        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه چاپ، در پیش‌نمایش پرینت با دو انگشت روی برگه زوم کنید (Pinch-Out) تا فایل PDF شود، سپس دکمه اشتراک <b>Share</b> را زده و <b>Save to Files</b> را انتخاب فرمایید.
+        📱 <b>راهنمای ذخیره PDF در آیفون:</b> پس از زدن دکمه بالا، در پنجره پرینت با دو انگشت روی برگه زوم به بیرون کنید (Pinch-Out) تا سند PDF شود، سپس با انتخاب <b>Share</b> و <b>Save to Files</b> آن را ذخیره فرمایید.
       </div>
     </div>
   </div>
 
-  <div class="header">
-    <div>
-      <h1 class="title">گزارش تحلیلی عملکرد مالی</h1>
-      <div class="meta">
-        بازه گزارش: ${startDate || "ابتدا"} تا ${endDate || "اکنون"}
-        | تاریخ استخراج: ${stampText} (${stamp})
+  <div class="page-container">
+    <div class="header">
+      <div>
+        <h1 class="title">گزارش تحلیلی عملکرد مالی</h1>
+        <div class="meta">
+          بازه گزارش: ${startDate || "ابتدا"} تا ${endDate || "اکنون"}
+          | تاریخ استخراج: ${stampText} (${stamp})
+        </div>
       </div>
     </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">درآمد دوره</div>
+        <div class="stat-val val-income">${formatNum(agg.periodIncome)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">هزینه دوره</div>
+        <div class="stat-val val-expense">${formatNum(agg.periodExpense)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">پس‌انداز خالص دوره</div>
+        <div class="stat-val val-savings">${formatNum(netSavings)} ریال</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">کارمزد پرداختی</div>
+        <div class="stat-val val-fee">${formatNum(agg.totalFee)} ریال</div>
+      </div>
+    </div>
+
+    <div class="section-title">تفکیک هزینه‌ها به تفکیک سرفصل</div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>سرفصل / زیرمجموعه</th>
+            <th style="width: 130px;" class="text-left">مبلغ (ریال)</th>
+            <th style="width: 140px;">سهم از کل هزینه</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${expenseList.length === 0 ? `<tr><td colspan="3" class="text-center" style="color: #94a3b8; padding: 12px;">در این بازه هزینه‌ای ثبت نشده است.</td></tr>` : ""}
+          ${expenseList
+            .map((p) => {
+              const pRows = `
+                <tr class="parent-row">
+                  <td>📁 ${p.name}</td>
+                  <td class="text-left" style="font-weight: bold;">${formatNum(p.total)}</td>
+                  <td>
+                    <span class="progress-bar-bg"><span class="progress-bar-fill fill-expense" style="width: ${Math.min(100, Math.max(0, Number(p.percentage)))}%;"></span></span>
+                    <span>${Number(p.percentage).toLocaleString("fa-IR")}%</span>
+                  </td>
+                </tr>
+                ${p.subcategories
+                  .map((s) => {
+                    const sPct = agg.periodExpense > 0 ? ((s.total / agg.periodExpense) * 100).toFixed(1) : "0";
+                    return `
+                      <tr class="sub-row">
+                        <td>↳ ${s.name}</td>
+                        <td class="text-left">${formatNum(s.total)}</td>
+                        <td style="color: #64748b;">${Number(sPct).toLocaleString("fa-IR")}%</td>
+                      </tr>
+                    `;
+                  })
+                  .join("")}
+              `;
+              return pRows;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">تفکیک درآمدها به تفکیک سرفصل</div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>سرفصل / زیرمجموعه</th>
+            <th style="width: 130px;" class="text-left">مبلغ (ریال)</th>
+            <th style="width: 140px;">سهم از کل درآمد</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${incomeList.length === 0 ? `<tr><td colspan="3" class="text-center" style="color: #94a3b8; padding: 12px;">در این بازه درآمدی ثبت نشده است.</td></tr>` : ""}
+          ${incomeList
+            .map((p) => {
+              const pRows = `
+                <tr class="parent-row">
+                  <td>💰 ${p.name}</td>
+                  <td class="text-left" style="font-weight: bold;">${formatNum(p.total)}</td>
+                  <td>
+                    <span class="progress-bar-bg"><span class="progress-bar-fill fill-income" style="width: ${Math.min(100, Math.max(0, Number(p.percentage)))}%;"></span></span>
+                    <span>${Number(p.percentage).toLocaleString("fa-IR")}%</span>
+                  </td>
+                </tr>
+                ${p.subcategories
+                  .map((s) => {
+                    const sPct = agg.periodIncome > 0 ? ((s.total / agg.periodIncome) * 100).toFixed(1) : "0";
+                    return `
+                      <tr class="sub-row">
+                        <td>↳ ${s.name}</td>
+                        <td class="text-left">${formatNum(s.total)}</td>
+                        <td style="color: #64748b;">${Number(sPct).toLocaleString("fa-IR")}%</td>
+                      </tr>
+                    `;
+                  })
+                  .join("")}
+              `;
+              return pRows;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>
   </div>
-
-  <div class="stats">
-    <div class="stat-card">
-      <div class="stat-label">درآمد دوره</div>
-      <div class="stat-val val-income">${formatNum(agg.periodIncome)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">هزینه دوره</div>
-      <div class="stat-val val-expense">${formatNum(agg.periodExpense)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">پس‌انداز خالص دوره</div>
-      <div class="stat-val val-savings">${formatNum(netSavings)} ریال</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">کارمزد پرداختی</div>
-      <div class="stat-val val-fee">${formatNum(agg.totalFee)} ریال</div>
-    </div>
-  </div>
-
-  <div class="section-title">تفکیک هزینه‌ها به تفکیک سرفصل</div>
-  <table>
-    <thead>
-      <tr>
-        <th>سرفصل / زیرمجموعه</th>
-        <th style="width: 130px;">مبلغ (ریال)</th>
-        <th style="width: 140px;">سهم از کل هزینه</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${expenseList.length === 0 ? `<tr><td colspan="3" class="text-center" style="color: #94a3b8; padding: 12px;">در این بازه هزینه‌ای ثبت نشده است.</td></tr>` : ""}
-      ${expenseList
-        .map((p) => {
-          const pRows = `
-            <tr class="parent-row">
-              <td>📁 ${p.name}</td>
-              <td style="font-weight: bold;">${formatNum(p.total)}</td>
-              <td>
-                <span class="progress-bar-bg"><span class="progress-bar-fill fill-expense" style="width: ${Math.min(100, Math.max(0, Number(p.percentage)))}%;"></span></span>
-                <span>${Number(p.percentage).toLocaleString("fa-IR")}%</span>
-              </td>
-            </tr>
-            ${p.subcategories
-              .map((s) => {
-                const sPct = agg.periodExpense > 0 ? ((s.total / agg.periodExpense) * 100).toFixed(1) : "0";
-                return `
-                  <tr class="sub-row">
-                    <td>↳ ${s.name}</td>
-                    <td>${formatNum(s.total)}</td>
-                    <td style="color: #64748b;">${Number(sPct).toLocaleString("fa-IR")}%</td>
-                  </tr>
-                `;
-              })
-              .join("")}
-          `;
-          return pRows;
-        })
-        .join("")}
-    </tbody>
-  </table>
-
-  <div class="section-title">تفکیک درآمدها به تفکیک سرفصل</div>
-  <table>
-    <thead>
-      <tr>
-        <th>سرفصل / زیرمجموعه</th>
-        <th style="width: 130px;">مبلغ (ریال)</th>
-        <th style="width: 140px;">سهم از کل درآمد</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${incomeList.length === 0 ? `<tr><td colspan="3" class="text-center" style="color: #94a3b8; padding: 12px;">در این بازه درآمدی ثبت نشده است.</td></tr>` : ""}
-      ${incomeList
-        .map((p) => {
-          const pRows = `
-            <tr class="parent-row">
-              <td>💰 ${p.name}</td>
-              <td style="font-weight: bold;">${formatNum(p.total)}</td>
-              <td>
-                <span class="progress-bar-bg"><span class="progress-bar-fill fill-income" style="width: ${Math.min(100, Math.max(0, Number(p.percentage)))}%;"></span></span>
-                <span>${Number(p.percentage).toLocaleString("fa-IR")}%</span>
-              </td>
-            </tr>
-            ${p.subcategories
-              .map((s) => {
-                const sPct = agg.periodIncome > 0 ? ((s.total / agg.periodIncome) * 100).toFixed(1) : "0";
-                return `
-                  <tr class="sub-row">
-                    <td>↳ ${s.name}</td>
-                    <td>${formatNum(s.total)}</td>
-                    <td style="color: #64748b;">${Number(sPct).toLocaleString("fa-IR")}%</td>
-                  </tr>
-                `;
-              })
-              .join("")}
-          `;
-          return pRows;
-        })
-        .join("")}
-    </tbody>
-  </table>
 
   <script>
-    // اجرای هوشمند پرینت در دسکتاپ پس از بارگذاری
+    function triggerPrint() {
+      window.print();
+    }
     window.addEventListener("DOMContentLoaded", () => {
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       if (!isMobile) {
         setTimeout(() => {
           window.print();
-        }, 400);
+        }, 300);
       }
     });
   </script>
