@@ -12,7 +12,7 @@ import {
   PENDING_EXPENSE_CATEGORY_ID,
   PENDING_INCOME_CATEGORY_ID,
 } from "@/db/repo";
-import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind } from "@/lib/sms-parser";
+import { parseBankSms, normalizeSmsText, tokenLast4, parseExplicitKind, type SmsKind } from "@/lib/sms-parser";
 import { formatMoney } from "@/lib/date-utils";
 import { sanitizeString } from "@/lib/validation";
 
