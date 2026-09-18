@@ -208,10 +208,18 @@ export default function App() {
   // ثبت در تاریخچه مرورگر هنگام باز شدن هر مودال (برای عملکرد صحیح دکمه Back گوشی)
   const pushModalHistory = useCallback((modalType: string) => {
     if (typeof window !== "undefined") {
-      window.history.pushState(
-        { isModal: true, modalType, tab: currentTab, ledgerAccountId },
-        ""
-      );
+      if (window.history.state?.isModal) {
+        // اگر قبلاً در مودال بودیم (مثل جابه‌جایی از منو به فرم تراکنش)، استیت را جایگزین کن تا مسابقه popstate رخ ندهد
+        window.history.replaceState(
+          { isModal: true, modalType, tab: currentTab, ledgerAccountId },
+          ""
+        );
+      } else {
+        window.history.pushState(
+          { isModal: true, modalType, tab: currentTab, ledgerAccountId },
+          ""
+        );
+      }
     }
   }, [currentTab, ledgerAccountId]);
 
@@ -246,10 +254,18 @@ export default function App() {
     setLedgerAccountId(accountId);
     setCurrentTab("ledger");
     if (typeof window !== "undefined") {
-      window.history.pushState(
-        { tab: "ledger", ledgerAccountId: accountId, isModal: false },
-        ""
-      );
+      if (window.history.state?.isModal) {
+        // اگر از داخل اکشن‌شیت یا جستجو به گردش حساب رفتیم، استیت را مستقیم با لجر جایگزین کن
+        window.history.replaceState(
+          { tab: "ledger", ledgerAccountId: accountId, isModal: false },
+          ""
+        );
+      } else {
+        window.history.pushState(
+          { tab: "ledger", ledgerAccountId: accountId, isModal: false },
+          ""
+        );
+      }
     }
   }, [currentTab]);
 
@@ -657,8 +673,9 @@ export default function App() {
                       icon: <ArrowUpRight className="w-4.5 h-4.5" />,
                       tone: "rose" as const,
                       onClick: () => {
-                        handleCloseAction();
-                        handleOpenNewTx(actionAccount.id, null);
+                        const accId = actionAccount.id;
+                        setActionAccount(null);
+                        handleOpenNewTx(accId, null);
                       },
                     },
                     {
@@ -667,8 +684,9 @@ export default function App() {
                       icon: <ArrowDownLeft className="w-4.5 h-4.5" />,
                       tone: "emerald" as const,
                       onClick: () => {
-                        handleCloseAction();
-                        handleOpenNewTx(null, actionAccount.id);
+                        const accId = actionAccount.id;
+                        setActionAccount(null);
+                        handleOpenNewTx(null, accId);
                       },
                     }
                   );
@@ -679,11 +697,13 @@ export default function App() {
                     icon: <Plus className="w-4.5 h-4.5" />,
                     tone: "sky" as const,
                     onClick: () => {
-                      handleCloseAction();
-                      if (actionAccount.type === "expense") {
-                        handleOpenNewTx(null, actionAccount.id);
+                      const accId = actionAccount.id;
+                      const isExp = actionAccount.type === "expense";
+                      setActionAccount(null);
+                      if (isExp) {
+                        handleOpenNewTx(null, accId);
                       } else {
-                        handleOpenNewTx(actionAccount.id, null);
+                        handleOpenNewTx(accId, null);
                       }
                     },
                   });
@@ -695,8 +715,9 @@ export default function App() {
                     icon: <ListOrdered className="w-4.5 h-4.5" />,
                     tone: "sky" as const,
                     onClick: () => {
-                      handleCloseAction();
-                      handleFilterTransactionsByAccount(actionAccount.id);
+                      const accId = actionAccount.id;
+                      setActionAccount(null);
+                      handleFilterTransactionsByAccount(accId);
                     },
                   },
                   {
@@ -705,8 +726,9 @@ export default function App() {
                     icon: <Edit2 className="w-4.5 h-4.5" />,
                     tone: "slate" as const,
                     onClick: () => {
-                      handleCloseAction();
-                      handleOpenEditAccount(actionAccount);
+                      const acc = actionAccount;
+                      setActionAccount(null);
+                      handleOpenEditAccount(acc);
                     },
                   }
                 );
@@ -750,11 +772,11 @@ export default function App() {
         onClose={handleCloseSearch}
         allAccounts={accounts}
         onSelectAccount={(acc) => {
-          handleCloseSearch();
+          setIsSearchOpen(false);
           handleOpenActionAccount(acc);
         }}
         onSelectTransaction={(tx) => {
-          handleCloseSearch();
+          setIsSearchOpen(false);
           handleEditTx(tx);
         }}
       />
