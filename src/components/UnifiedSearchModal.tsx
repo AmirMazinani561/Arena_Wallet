@@ -161,7 +161,6 @@ export function UnifiedSearchModal({
                         type="button"
                         onClick={() => {
                           if (onSelectAccount) onSelectAccount(acc);
-                          onClose();
                         }}
                         className="w-full text-right p-2.5 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-100 flex items-center justify-between transition"
                       >
@@ -202,7 +201,6 @@ export function UnifiedSearchModal({
                         type="button"
                         onClick={() => {
                           if (onSelectTransaction) onSelectTransaction(tx);
-                          onClose();
                         }}
                         className="w-full text-right p-2.5 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-100 flex items-center justify-between transition"
                       >
