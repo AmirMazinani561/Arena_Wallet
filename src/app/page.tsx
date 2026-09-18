@@ -202,12 +202,114 @@ export default function App() {
     setIsLoggedIn(false);
   };
 
+  // نگهداری تب پیشین جهت بازگشت ایمن و دقیق (مثلاً بازگشت از گردش حساب به حساب‌ها یا گزارشات)
+  const previousTabRef = useRef<string>("home");
+
+  // ثبت در تاریخچه مرورگر هنگام باز شدن هر مودال (برای عملکرد صحیح دکمه Back گوشی)
+  const pushModalHistory = useCallback((modalType: string) => {
+    if (typeof window !== "undefined") {
+      window.history.pushState(
+        { isModal: true, modalType, tab: currentTab, ledgerAccountId },
+        ""
+      );
+    }
+  }, [currentTab, ledgerAccountId]);
+
+  // عقب بردن تاریخچه مرورگر در صورت بسته شدن دستی مودال
+  const closeModalWithHistory = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.state?.isModal) {
+      window.history.back();
+    }
+  }, []);
+
+  // تغییر تب همراه با ثبت در تاریخچه ناوبری
+  const handleSwitchTab = useCallback((newTab: string) => {
+    if (newTab === currentTab && ledgerAccountId === null) return;
+    if (currentTab !== "ledger") {
+      previousTabRef.current = currentTab;
+    }
+    setCurrentTab(newTab);
+    setLedgerAccountId(null);
+    if (typeof window !== "undefined") {
+      window.history.pushState(
+        { tab: newTab, ledgerAccountId: null, isModal: false },
+        ""
+      );
+    }
+  }, [currentTab, ledgerAccountId]);
+
+  // باز کردن گردش حساب برای یک حساب خاص با ثبت تب مبدأ
+  const handleFilterTransactionsByAccount = useCallback((accountId: string) => {
+    if (currentTab !== "ledger") {
+      previousTabRef.current = currentTab;
+    }
+    setLedgerAccountId(accountId);
+    setCurrentTab("ledger");
+    if (typeof window !== "undefined") {
+      window.history.pushState(
+        { tab: "ledger", ledgerAccountId: accountId, isModal: false },
+        ""
+      );
+    }
+  }, [currentTab]);
+
+  // دکمه بازگشت هوشمند یک مرحله‌ای به بخش قبلی (به جای پرش مستقیم به خانه)
+  const handleGoBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.state?.tab) {
+      window.history.back();
+    } else {
+      const targetTab = previousTabRef.current || "home";
+      setCurrentTab(targetTab);
+      setLedgerAccountId(null);
+    }
+  }, []);
+
+  // مدیریت رویداد بازگشت گوشی و مرورگر (popstate)
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    if (typeof window !== "undefined" && (!window.history.state || !window.history.state.walletInitialized)) {
+      window.history.replaceState(
+        { tab: "home", ledgerAccountId: null, isModal: false, walletInitialized: true },
+        ""
+      );
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state;
+
+      // ۱. بستن تمام مودال‌ها بدون ارسال مجدد رویداد تاریخچه
+      setIsTxModalOpen(false);
+      setIsAccModalOpen(false);
+      setIsSearchOpen(false);
+      setActionAccount(null);
+
+      // ۲. بازگردانی دقیق تب و گردش حساب به وضعیت قبلی
+      if (state && typeof state === "object") {
+        if (state.tab) {
+          setCurrentTab(state.tab);
+          setLedgerAccountId(state.ledgerAccountId || null);
+        } else {
+          setCurrentTab("home");
+          setLedgerAccountId(null);
+        }
+      } else {
+        setCurrentTab("home");
+        setLedgerAccountId(null);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isLoggedIn]);
+
   // تراکنش‌ها
   const handleOpenNewTx = (fromAccountId: string | null = null, toAccountId: string | null = null) => {
     setEditingTx(null);
     setPresetFromAccountId(fromAccountId);
     setPresetToAccountId(toAccountId);
     setIsTxModalOpen(true);
+    pushModalHistory("tx");
   };
 
   const handleEditTx = (tx: Transaction) => {
@@ -216,6 +318,7 @@ export default function App() {
     setPresetFromAccountId(null);
     setPresetToAccountId(null);
     setIsTxModalOpen(true);
+    pushModalHistory("tx");
   };
 
   /** باز کردن تراکنش «در انتظار ثبت» — انتخابگرِ همان طرفِ خالی مستقیم باز می‌شود */
@@ -227,7 +330,15 @@ export default function App() {
     setPresetFromAccountId(null);
     setPresetToAccountId(null);
     setIsTxModalOpen(true);
+    pushModalHistory("tx");
   };
+
+  const handleCloseTxModal = useCallback(() => {
+    setIsTxModalOpen(false);
+    setEditingTx(null);
+    setTxPickerTarget(null);
+    closeModalWithHistory();
+  }, [closeModalWithHistory]);
 
   const handleDeleteTx = async (id: string) => {
     try {
@@ -249,6 +360,7 @@ export default function App() {
     setNewAccInitialType(type);
     setNewAccInitialParentId(parentId);
     setIsAccModalOpen(true);
+    pushModalHistory("acc");
   };
 
   const handleOpenEditAccount = (acc: Account) => {
@@ -256,7 +368,14 @@ export default function App() {
     setNewAccInitialType(acc.type);
     setNewAccInitialParentId(acc.parentId || null);
     setIsAccModalOpen(true);
+    pushModalHistory("acc");
   };
+
+  const handleCloseAccModal = useCallback(() => {
+    setIsAccModalOpen(false);
+    setEditingAccount(null);
+    closeModalWithHistory();
+  }, [closeModalWithHistory]);
 
   const handleDeleteAccount = async (id: string) => {
     try {
@@ -287,10 +406,25 @@ export default function App() {
     }
   };
 
-  const handleFilterTransactionsByAccount = (accountId: string) => {
-    setLedgerAccountId(accountId);
-    setCurrentTab("ledger");
+  const handleOpenSearch = () => {
+    setIsSearchOpen(true);
+    pushModalHistory("search");
   };
+
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    closeModalWithHistory();
+  }, [closeModalWithHistory]);
+
+  const handleOpenActionAccount = (acc: Account) => {
+    setActionAccount(acc);
+    pushModalHistory("action");
+  };
+
+  const handleCloseAction = useCallback(() => {
+    setActionAccount(null);
+    closeModalWithHistory();
+  }, [closeModalWithHistory]);
 
   /** ذخیره ترتیب دلخواه حساب‌های منتخب */
   const handleSaveOrder = async (ids: string[]) => {
@@ -378,7 +512,7 @@ export default function App() {
         }`}
       >
         <TopBar
-          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenSearch={handleOpenSearch}
           onLockApp={handleLogout}
         />
 
@@ -408,10 +542,10 @@ export default function App() {
                     recentLimit={recentLimit}
                     onChangeRecentLimit={handleChangeRecentLimit}
                     onOpenNewTx={() => handleOpenNewTx()}
-                    onAccountAction={(acc) => setActionAccount(acc)}
+                    onAccountAction={handleOpenActionAccount}
                     onSaveOrder={handleSaveOrder}
                     onSelectTx={handleEditTx}
-                    onSwitchTab={(t) => setCurrentTab(t)}
+                    onSwitchTab={handleSwitchTab}
                   />
                 </ErrorBoundary>
               )}
@@ -433,7 +567,7 @@ export default function App() {
                       }
                     }
                     allAccounts={accounts}
-                    onBack={() => setCurrentTab("home")}
+                    onBack={handleGoBack}
                     onEditTx={handleEditTxById}
                     reloadToken={refreshKey}
                   />
@@ -487,7 +621,7 @@ export default function App() {
 
         <BottomTabBar
           currentTab={currentTab}
-          onTabChange={(t) => setCurrentTab(t)}
+          onTabChange={handleSwitchTab}
           onOpenNewTx={() => handleOpenNewTx()}
         />
       </div>
@@ -495,7 +629,7 @@ export default function App() {
       {/* منوی انتخاب عملیات روی حساب منتخب صفحه اصلی */}
       <ActionSheet
         isOpen={actionAccount !== null}
-        onClose={() => setActionAccount(null)}
+        onClose={handleCloseAction}
         title={actionAccount?.name || ""}
         subtitle={
           actionAccount
@@ -522,14 +656,20 @@ export default function App() {
                       label: "پرداخت",
                       icon: <ArrowUpRight className="w-4.5 h-4.5" />,
                       tone: "rose" as const,
-                      onClick: () => handleOpenNewTx(actionAccount.id, null),
+                      onClick: () => {
+                        handleCloseAction();
+                        handleOpenNewTx(actionAccount.id, null);
+                      },
                     },
                     {
                       key: "receive",
                       label: "دریافت",
                       icon: <ArrowDownLeft className="w-4.5 h-4.5" />,
                       tone: "emerald" as const,
-                      onClick: () => handleOpenNewTx(null, actionAccount.id),
+                      onClick: () => {
+                        handleCloseAction();
+                        handleOpenNewTx(null, actionAccount.id);
+                      },
                     }
                   );
                 } else {
@@ -538,10 +678,14 @@ export default function App() {
                     label: "ثبت تراکنش",
                     icon: <Plus className="w-4.5 h-4.5" />,
                     tone: "sky" as const,
-                    onClick: () =>
-                      actionAccount.type === "expense"
-                        ? handleOpenNewTx(null, actionAccount.id)
-                        : handleOpenNewTx(actionAccount.id, null),
+                    onClick: () => {
+                      handleCloseAction();
+                      if (actionAccount.type === "expense") {
+                        handleOpenNewTx(null, actionAccount.id);
+                      } else {
+                        handleOpenNewTx(actionAccount.id, null);
+                      }
+                    },
                   });
                 }
                 items.push(
@@ -550,14 +694,20 @@ export default function App() {
                     label: "گردش حساب",
                     icon: <ListOrdered className="w-4.5 h-4.5" />,
                     tone: "sky" as const,
-                    onClick: () => handleFilterTransactionsByAccount(actionAccount.id),
+                    onClick: () => {
+                      handleCloseAction();
+                      handleFilterTransactionsByAccount(actionAccount.id);
+                    },
                   },
                   {
                     key: "edit",
                     label: "ویرایش حساب",
                     icon: <Edit2 className="w-4.5 h-4.5" />,
                     tone: "slate" as const,
-                    onClick: () => handleOpenEditAccount(actionAccount),
+                    onClick: () => {
+                      handleCloseAction();
+                      handleOpenEditAccount(actionAccount);
+                    },
                   }
                 );
                 return items;
@@ -568,11 +718,11 @@ export default function App() {
 
       <TransactionModal
         isOpen={isTxModalOpen}
-        onClose={() => {
-          setIsTxModalOpen(false);
-          setTxPickerTarget(null);
+        onClose={handleCloseTxModal}
+        onSuccess={() => {
+          handleCloseTxModal();
+          loadData();
         }}
-        onSuccess={loadData}
         editTx={editingTx}
         initialPickerTarget={txPickerTarget}
         allAccounts={accounts}
@@ -584,8 +734,11 @@ export default function App() {
 
       <CreateAccountModal
         isOpen={isAccModalOpen}
-        onClose={() => setIsAccModalOpen(false)}
-        onSuccess={() => loadData()}
+        onClose={handleCloseAccModal}
+        onSuccess={() => {
+          handleCloseAccModal();
+          loadData();
+        }}
         initialType={newAccInitialType}
         initialParentId={newAccInitialParentId}
         editAccount={editingAccount}
@@ -594,10 +747,16 @@ export default function App() {
 
       <UnifiedSearchModal
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
+        onClose={handleCloseSearch}
         allAccounts={accounts}
-        onSelectAccount={(acc) => setActionAccount(acc)}
-        onSelectTransaction={(tx) => handleEditTx(tx)}
+        onSelectAccount={(acc) => {
+          handleCloseSearch();
+          handleOpenActionAccount(acc);
+        }}
+        onSelectTransaction={(tx) => {
+          handleCloseSearch();
+          handleEditTx(tx);
+        }}
       />
     </main>
   );
