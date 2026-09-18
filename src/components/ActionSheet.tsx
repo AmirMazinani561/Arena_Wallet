@@ -67,7 +67,6 @@ export function ActionSheet({ isOpen, onClose, title, subtitle, items }: Props) 
               type="button"
               onClick={() => {
                 item.onClick();
-                onClose();
               }}
               className="w-full text-right p-3 hover:bg-sky-50/70 rounded-2xl transition flex items-center gap-3 active:scale-[0.99]"
             >
