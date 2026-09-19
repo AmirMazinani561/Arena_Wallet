@@ -109,7 +109,7 @@ export function TransactionModal({
   const [trackingNumber, setTrackingNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(() => initialPickerTarget || null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -366,6 +366,7 @@ export function TransactionModal({
       {pickerTarget && (
         <AccountPickerModal
           isOpen
+          autoFocusInput
           onClose={() => setPickerTarget(null)}
           title={pickerTarget === "from" ? "انتخاب حساب مبدا" : "انتخاب حساب مقصد"}
           allowedTypes={

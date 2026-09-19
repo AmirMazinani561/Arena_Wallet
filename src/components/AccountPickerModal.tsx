@@ -18,6 +18,7 @@ interface Props {
   selectedId?: string;
   allAccounts: Account[];
   onAccountCreated?: (newAccount: Account) => void;
+  autoFocusInput?: boolean;
 }
 
 const TYPE_LABEL: Record<AccountType, string> = {
@@ -57,6 +58,7 @@ export function AccountPickerModal({
   selectedId,
   allAccounts,
   onAccountCreated,
+  autoFocusInput = true,
 }: Props) {
   useLockBodyScroll(isOpen);
   const viewportStyle = useModalViewportStyle(isOpen);
@@ -71,12 +73,13 @@ export function AccountPickerModal({
     listRef.current?.scrollTo({ top: 0 });
   }, [search, filterType]);
 
-  // فوکوس با تأخیر کوتاه تا انیمیشن باز شدن با اسکرول خودکار Safari تداخل نکند
+  // فوکوس آنی همگام جهت باز شدن خودکار کیبورد در گوشی‌ها (iOS و اندروید)
   useEffect(() => {
-    if (!isOpen) return;
-    const t = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 80);
+    if (!isOpen || !autoFocusInput) return;
+    inputRef.current?.focus();
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => clearTimeout(t);
-  }, [isOpen]);
+  }, [isOpen, autoFocusInput]);
 
   const accountMap = useMemo(() => {
     const m = new Map<string, Account>();
@@ -157,6 +160,7 @@ export function AccountPickerModal({
             <div className="relative">
               <input
                 ref={inputRef}
+                autoFocus={autoFocusInput}
                 type="search"
                 inputMode="search"
                 enterKeyHint="done"
