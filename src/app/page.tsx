@@ -337,21 +337,8 @@ export default function App() {
     pushModalHistory("tx");
   };
 
-  /** بیدار کردن فوری کیبورد مجازی در رویداد مستقیم لمس انگشت (سازگار با iOS Safari و Android) */
-  const wakeMobileKeyboard = () => {
-    try {
-      const proxy = document.getElementById("mobile-keyboard-proxy") as HTMLInputElement | null;
-      if (proxy) {
-        proxy.focus({ preventScroll: true });
-      }
-    } catch {
-      /* نادیده گرفتن در صورت بروز خطا */
-    }
-  };
-
   /** باز کردن تراکنش «در انتظار ثبت» — انتخابگرِ همان طرفِ خالی مستقیم باز می‌شود */
   const handleOpenPendingTx = (tx: Transaction) => {
-    wakeMobileKeyboard();
     setEditingTx(tx);
     if (tx.fromAccountId === PENDING_INCOME_CATEGORY_ID) setTxPickerTarget("from");
     else if (tx.toAccountId === PENDING_EXPENSE_CATEGORY_ID) setTxPickerTarget("to");
@@ -791,27 +778,6 @@ export default function App() {
         onSelectTransaction={(tx) => {
           setIsSearchOpen(false);
           handleEditTx(tx);
-        }}
-      />
-
-      {/* اینپوت نامرئی بیدارباش کیبورد برای شکستن محدودیت‌های امنیتی سافاری آیفون و کروم اندروید */}
-      <input
-        id="mobile-keyboard-proxy"
-        type="text"
-        tabIndex={-1}
-        aria-hidden="true"
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        style={{
-          position: "fixed",
-          top: "-9999px",
-          left: "-9999px",
-          opacity: 0,
-          width: "1px",
-          height: "1px",
-          fontSize: "16px",
-          pointerEvents: "none",
         }}
       />
     </main>

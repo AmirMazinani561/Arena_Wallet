@@ -109,7 +109,7 @@ export function TransactionModal({
   const [trackingNumber, setTrackingNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(() => initialPickerTarget || null);
+  const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -230,10 +230,7 @@ export function TransactionModal({
               <label className={labelCls}>حساب مبدا</label>
               <button
                 type="button"
-                onClick={() => {
-                  try { document.getElementById("mobile-keyboard-proxy")?.focus(); } catch {}
-                  setPickerTarget("from");
-                }}
+                onClick={() => setPickerTarget("from")}
                 className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
                   pendingSide === "from"
                     ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
@@ -255,10 +252,7 @@ export function TransactionModal({
               <label className={labelCls}>حساب مقصد</label>
               <button
                 type="button"
-                onClick={() => {
-                  try { document.getElementById("mobile-keyboard-proxy")?.focus(); } catch {}
-                  setPickerTarget("to");
-                }}
+                onClick={() => setPickerTarget("to")}
                 className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
                   pendingSide === "to"
                     ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
@@ -372,7 +366,6 @@ export function TransactionModal({
       {pickerTarget && (
         <AccountPickerModal
           isOpen
-          autoFocusInput
           onClose={() => setPickerTarget(null)}
           title={pickerTarget === "from" ? "انتخاب حساب مبدا" : "انتخاب حساب مقصد"}
           allowedTypes={

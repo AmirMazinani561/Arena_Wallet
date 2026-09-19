@@ -158,11 +158,10 @@ export function HomeTab({
               const isInc = tx.type === "income";
 
               return (
-                <button
+                <div
                   key={tx.id}
-                  type="button"
                   onClick={() => onSelectPendingTx(tx)}
-                  className="w-full text-right p-3 hover:bg-amber-50/60 active:bg-amber-100/70 cursor-pointer transition flex items-center justify-between gap-2 border-0 bg-transparent"
+                  className="p-3 hover:bg-amber-50/60 cursor-pointer transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div
@@ -215,7 +214,7 @@ export function HomeTab({
                       </div>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
