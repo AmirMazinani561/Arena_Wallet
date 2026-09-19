@@ -73,12 +73,14 @@ export function AccountPickerModal({
     listRef.current?.scrollTo({ top: 0 });
   }, [search, filterType]);
 
-  // فوکوس آنی همگام جهت باز شدن خودکار کیبورد در گوشی‌ها (iOS و اندروید)
+  // فوکوس آنی و انتقال کیبورد از پروکسی در گوشی‌ها (iOS Safari و Android)
   useEffect(() => {
     if (!isOpen || !autoFocusInput) return;
-    inputRef.current?.focus();
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(t);
+    inputRef.current?.focus({ preventScroll: true });
+    const raf = requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [isOpen, autoFocusInput]);
 
   const accountMap = useMemo(() => {
@@ -172,7 +174,7 @@ export function AccountPickerModal({
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={blurOnEnter}
                 placeholder="جستجوی نام حساب…"
-                className="w-full pr-9 pl-9 py-2.5 text-xs bg-white border border-sky-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition appearance-none"
+                className="w-full pr-9 pl-9 py-2.5 text-[16px] sm:text-xs bg-white border border-sky-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition appearance-none"
               />
               <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
               {search && (

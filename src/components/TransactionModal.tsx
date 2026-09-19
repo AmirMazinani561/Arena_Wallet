@@ -230,7 +230,10 @@ export function TransactionModal({
               <label className={labelCls}>حساب مبدا</label>
               <button
                 type="button"
-                onClick={() => setPickerTarget("from")}
+                onClick={() => {
+                  try { document.getElementById("mobile-keyboard-proxy")?.focus(); } catch {}
+                  setPickerTarget("from");
+                }}
                 className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
                   pendingSide === "from"
                     ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
@@ -252,7 +255,10 @@ export function TransactionModal({
               <label className={labelCls}>حساب مقصد</label>
               <button
                 type="button"
-                onClick={() => setPickerTarget("to")}
+                onClick={() => {
+                  try { document.getElementById("mobile-keyboard-proxy")?.focus(); } catch {}
+                  setPickerTarget("to");
+                }}
                 className={`w-full p-3 text-right rounded-xl transition flex items-center justify-between gap-2 ${
                   pendingSide === "to"
                     ? "bg-amber-50 border-2 border-amber-400 ring-2 ring-amber-200"
