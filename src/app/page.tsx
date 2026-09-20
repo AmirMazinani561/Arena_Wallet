@@ -82,11 +82,9 @@ export default function App() {
       });
   }, []);
 
-  const lastSyncedVersionRef = useRef<string | null>(null);
-
-  const loadData = useCallback(async (silent = false) => {
+  const loadData = useCallback(async () => {
     try {
-      if (!silent) setLoading(true);
+      setLoading(true);
       // فقط تعداد انتخاب‌شده توسط کاربر (۵ تا ۵۰) از تراکنش‌های اخیر خوانده می‌شود
       const [accRes, txRes, pendingRes] = await Promise.all([
         fetch("/api/accounts"),
@@ -108,80 +106,16 @@ export default function App() {
       if (txRes.ok && txData.transactions) setTransactions(txData.transactions);
       if (pendingRes.ok && pendingData.transactions) setPendingTxs(pendingData.transactions);
       setRefreshKey((k) => k + 1);
-
-      // همگام‌سازی نگارش جهت عدم تکرار درخواست‌ها
-      fetch("/api/sync/status")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => {
-          if (d?.v && d.v !== "err") {
-            lastSyncedVersionRef.current = d.v;
-          }
-        })
-        .catch(() => {});
     } catch (err) {
       console.error("Error loading wallet data:", err);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   }, [recentLimit]);
 
   useEffect(() => {
     if (isLoggedIn) loadData();
   }, [isLoggedIn, loadData]);
-
-  // بررسی هوشمند تغییرات با کمترین بار مصرفی پردازنده و پهنای باند
-  const checkSync = useCallback(async () => {
-    if (!isLoggedIn) return;
-    try {
-      const res = await fetch("/api/sync/status");
-      if (res.status === 401) return;
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data?.v || data.v === "err") return;
-
-      if (lastSyncedVersionRef.current === null) {
-        lastSyncedVersionRef.current = data.v;
-      } else if (lastSyncedVersionRef.current !== data.v) {
-        lastSyncedVersionRef.current = data.v;
-        // بروزرسانی بی‌صدا بدون چشمک زدن صفحه یا لودینگ مزاحم
-        await loadData(true);
-      }
-    } catch {
-      // نادیده گرفتن بی‌صدای خطای موقت شبکه در پس‌زمینه
-    }
-  }, [isLoggedIn, loadData]);
-
-  // رویداد بازگشت به برنامه (باز شدن قفل گوشی، سوئیچ بین برنامه‌ها، یا فعال شدن مجدد تب)
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const handleFocusOrVisible = () => {
-      if (document.visibilityState === "visible") {
-        checkSync();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleFocusOrVisible);
-    window.addEventListener("focus", handleFocusOrVisible);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleFocusOrVisible);
-      window.removeEventListener("focus", handleFocusOrVisible);
-    };
-  }, [isLoggedIn, checkSync]);
-
-  // پایش منظم در پس‌زمینه (فقط و فقط در صورتی که کاربر داخل برنامه فعال باشد)
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const interval = setInterval(() => {
-      // در زمان قفل بودن گوشی یا فعال بودن برنامه‌های دیگر هیچ درخواستی فرستاده نمی‌شود
-      if (document.visibilityState !== "visible") return;
-      checkSync();
-    }, 15000); // پینگ ۲۰ بایتی هر ۱۵ ثانیه فقط در تب فعال
-
-    return () => clearInterval(interval);
-  }, [isLoggedIn, checkSync]);
 
   const handleLoginSuccess = (loggedInUser: { id: string; username: string; fullName?: string | null }) => {
     setUser(loggedInUser);
