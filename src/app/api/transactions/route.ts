@@ -350,13 +350,31 @@ export async function PUT(req: Request) {
     // ارتقای تراکنش‌های نیمه‌تمام (ثبت‌شده از پیامک):
     // به محض اینکه طرف دوم از سرفصل موقت به حساب/سرفصل واقعی تغییر کند،
     // وضعیت از pending به active می‌رود و از صف انتظار خارج می‌شود.
-    if (existing.status === "pending") {
-      const stillPending = [finalFromId, finalToId].some(
-        (sid) => sid === PENDING_EXPENSE_CATEGORY_ID || sid === PENDING_INCOME_CATEGORY_ID
-      );
-      if (!stillPending) {
-        await setTransactionStatus(String(id), "active");
-      }
+    const isStillPending = [finalFromId, finalToId].some(
+      (sid) => sid === PENDING_EXPENSE_CATEGORY_ID || sid === PENDING_INCOME_CATEGORY_ID
+    );
+    if (existing.status === "pending" && !isStillPending) {
+      await setTransactionStatus(String(id), "active");
+    }
+
+    // همگام‌سازی با نرم‌افزار سرمایه (در صورتی که تراکنش کامل و فعال باشد)
+    if (!isStillPending) {
+      const finalAmount = validatedAmountValue !== undefined ? validatedAmountValue : existing.amount;
+      const finalShamsi = shamsiValue || existing.shamsiDate || "";
+      const finalDesc = description !== undefined
+        ? (description ? String(description).trim() : null)
+        : (existing.description ? String(existing.description).trim() : null);
+
+      void syncToEquity({
+        id: String(id),
+        amount: finalAmount,
+        fromAccountId: finalFromId,
+        toAccountId: finalToId,
+        fromAccountName: fromAcc.name,
+        toAccountName: toAcc.name,
+        shamsiDate: finalShamsi,
+        description: finalDesc,
+      });
     }
 
     return NextResponse.json({ success: true, message: "تراکنش با موفقیت ویرایش شد." });

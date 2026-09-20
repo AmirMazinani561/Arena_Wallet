@@ -665,7 +665,32 @@ export default function App() {
             ? (() => {
                 const isAsset = ["bank", "cash", "person"].includes(actionAccount.type);
                 const items = [];
-                if (isAsset) {
+                if (actionAccount.type === "person") {
+                  items.push(
+                    {
+                      key: "pay",
+                      label: "پرداخت به شخص",
+                      icon: <ArrowUpRight className="w-4.5 h-4.5" />,
+                      tone: "rose" as const,
+                      onClick: () => {
+                        const accId = actionAccount.id;
+                        setActionAccount(null);
+                        handleOpenNewTx(null, accId);
+                      },
+                    },
+                    {
+                      key: "receive",
+                      label: "دریافت از شخص",
+                      icon: <ArrowDownLeft className="w-4.5 h-4.5" />,
+                      tone: "emerald" as const,
+                      onClick: () => {
+                        const accId = actionAccount.id;
+                        setActionAccount(null);
+                        handleOpenNewTx(accId, null);
+                      },
+                    }
+                  );
+                } else if (isAsset) {
                   items.push(
                     {
                       key: "pay",
