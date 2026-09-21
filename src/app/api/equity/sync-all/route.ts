@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { ensureDatabase, listAccounts, query } from "@/db/repo";
+import { ensureDatabase, listAccounts } from "@/db/repo";
+import { query } from "@/db/client";
 import { getSessionFromRequest } from "@/lib/session";
 import { syncToEquity } from "@/lib/equity-sync";
 import { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID } from "@/lib/pending-categories";

@@ -21,6 +21,7 @@ export const BANK_FEE_CATEGORY_ID = "cat_exp_bank_fee";
 
 // بازصادر برای سازگاری با واردکننده‌های فعلی (API ها)؛ مقدارها در pending-categories تعریف شده‌اند
 export { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID };
+export { query, execute, withTransaction };
 
 /* ------------------------------------------------------------------ */
 /*  انواع داده                                                          */
