@@ -32,12 +32,49 @@ export interface SyncResult {
   created?: string;
 }
 
+function normalizeName(s?: string | null): string {
+  return String(s || "")
+    .replace(/\u200c/g, " ")        // نیم‌فاصله → فاصله
+    .replace(/[يى]/g, "ی")          // ی عربی → ی فارسی
+    .replace(/ك/g, "ک")             // ک عربی → ک فارسی
+    .replace(/[أإآا]/g, "ا")        // انواع الف
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")           // چند فاصله → یک فاصله
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * آیا حساب به یکی از شرکای مجاز سرمایه تعلق دارد؟
+ * طبق تعریف صریح کاربر: فقط و فقط «سرمایه سلطانی» و «سرمایه مزینانی»
+ */
+export function isAllowedEquityAccount(name?: string | null): boolean {
+  const norm = normalizeName(name);
+  if (!norm) return false;
+  const isSoltani = norm.includes("سلطانی");
+  const isMazinani = norm.includes("مزینانی");
+  return (isSoltani || isMazinani) && (norm.includes("سرمایه") || norm === "سلطانی" || norm === "مزینانی");
+}
+
 export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
   const base = process.env.EQUITY_URL;
   const token = process.env.EQUITY_TOKEN;
 
   // تنظیم نشده ⇒ قابلیت خاموش است، بی‌سروصدا رد شو
   if (!base || !token) return { ok: false, error: "not_configured" };
+
+  // فیلتر سخت‌گیرانه: باید مشخصاً یک طرف «سرمایه سلطانی» یا «سرمایه مزینانی» باشد
+  const fromAllowed = isAllowedEquityAccount(tx.fromAccountName);
+  const toAllowed = isAllowedEquityAccount(tx.toAccountName);
+
+  if (!fromAllowed && !toAllowed) {
+    return { ok: true, skipped: "no-partner" };
+  }
+
+  // اگر هر دو طرف حساب سرمایه باشند (انتقال بین دو شریک) ⇒ بی‌اثر در سرمایه کل
+  if (fromAllowed && toAllowed) {
+    return { ok: true, skipped: "internal-transfer" };
+  }
 
   try {
     const res = await fetch(`${base.replace(/\/+$/, "")}/api/wallet-intake`, {
