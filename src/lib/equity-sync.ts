@@ -23,12 +23,21 @@ type SyncInput = {
   description?: string | null;
 };
 
-export async function syncToEquity(tx: SyncInput): Promise<void> {
-  const base  = process.env.EQUITY_URL;
+export interface SyncResult {
+  ok: boolean;
+  status?: number;
+  data?: unknown;
+  error?: string;
+  skipped?: string;
+  created?: string;
+}
+
+export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
+  const base = process.env.EQUITY_URL;
   const token = process.env.EQUITY_TOKEN;
 
   // تنظیم نشده ⇒ قابلیت خاموش است، بی‌سروصدا رد شو
-  if (!base || !token) return;
+  if (!base || !token) return { ok: false, error: "not_configured" };
 
   try {
     const res = await fetch(`${base.replace(/\/+$/, "")}/api/wallet-intake`, {
@@ -51,10 +60,23 @@ export async function syncToEquity(tx: SyncInput): Promise<void> {
       signal: AbortSignal.timeout(8000),
     });
 
+    const json = (await res.json().catch(() => null)) as { created?: string; skipped?: string; error?: string } | null;
+
     if (!res.ok) {
-      console.error("[equity-sync] رد شد:", res.status, await res.text());
+      console.error("[equity-sync] رد شد:", res.status, json);
+      return { ok: false, status: res.status, error: json?.error || "rejected" };
     }
-  } catch (err) {
+
+    return {
+      ok: true,
+      status: res.status,
+      data: json,
+      created: json?.created,
+      skipped: json?.skipped,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "network_error";
     console.error("[equity-sync] ناموفق:", err);
+    return { ok: false, error: message };
   }
 }

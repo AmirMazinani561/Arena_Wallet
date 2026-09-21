@@ -12,6 +12,8 @@ import {
   Sparkles,
   HelpCircle,
   MessageSquareText,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { BackupModal } from "./BackupModal";
 import { LoginModal } from "./LoginModal";
@@ -31,6 +33,26 @@ export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }:
   const [isBackupOpen, setIsBackupOpen] = useState(false);
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
   const [showAccountingHelp, setShowAccountingHelp] = useState(false);
+  const [isSyncingEquity, setIsSyncingEquity] = useState(false);
+
+  const handleSyncEquityAll = async () => {
+    if (isSyncingEquity) return;
+    setIsSyncingEquity(true);
+    try {
+      const res = await fetch("/api/equity/sync-all", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "خطا در برقراری ارتباط با سرور");
+        return;
+      }
+      alert(data.message || "همگام‌سازی با موفقیت انجام شد.");
+      onRefreshAllData();
+    } catch {
+      alert("خطای ارتباط با سرور");
+    } finally {
+      setIsSyncingEquity(false);
+    }
+  };
 
   return (
     <div className="space-y-4 pb-6 animate-in fade-in duration-150">
@@ -94,6 +116,35 @@ export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }:
               </div>
             </div>
             <span className="text-xs font-semibold text-sky-600">اقدام ❯</span>
+          </button>
+
+          {/* بررسی و همگام‌سازی با نرم‌افزار سرمایه */}
+          <button
+            type="button"
+            onClick={handleSyncEquityAll}
+            disabled={isSyncingEquity}
+            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                {isSyncingEquity ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-800">
+                  همگام‌سازی با نرم‌افزار سرمایه
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  بررسی تراکنش‌های جاافتاده شرکا و انتقال خودکار به حساب سرمایه‌گذاران
+                </div>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-emerald-600">
+              {isSyncingEquity ? "در حال بررسی…" : "بررسی و انتقال ❯"}
+            </span>
           </button>
 
           {/* Quick Add from SMS */}
