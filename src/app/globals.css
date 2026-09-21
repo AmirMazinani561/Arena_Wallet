@@ -14,7 +14,7 @@
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
-    background-color: #f0f6fa;
+    background-color: #f2f7fb;
     color: #1e293b;
     overflow-x: hidden;
   }
@@ -26,31 +26,31 @@
 
 /* Custom iOS style animations & scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: rgba(100, 116, 139, 0.5);
 }
 
 .ios-glass {
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .ios-card {
   background: #ffffff;
   border-radius: 1.25rem;
-  box-shadow: 0 4px 20px -2px rgba(2, 132, 199, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(224, 242, 254, 0.8);
+  box-shadow: 0 2px 16px -2px rgba(2, 132, 199, 0.06), 0 1px 4px -1px rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(224, 242, 254, 0.7);
 }
 
 .ios-card-pressable {
