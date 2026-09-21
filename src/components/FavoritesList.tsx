@@ -164,7 +164,7 @@ export function FavoritesList({
       {list.length === 0 ? (
         emptyState ?? null
       ) : (
-        <div className={`ios-card divide-y divide-slate-100 overflow-hidden ${reordering ? "ring-2 ring-sky-200" : ""}`}>
+        <div className={`space-y-2 ${reordering ? "p-2 rounded-2xl bg-sky-50/40 border border-sky-200" : ""}`}>
           {list.map((acc, idx) => {
             const amt = amountOf(acc);
             const isFirst = idx === 0;
@@ -173,7 +173,9 @@ export function FavoritesList({
             return (
               <div
                 key={acc.id}
-                className={`flex items-center gap-2 ${reordering ? "bg-sky-50/40" : ""}`}
+                className={`bg-white rounded-2xl border border-sky-200 shadow-xs flex items-center transition hover:border-sky-300 ${
+                  reordering ? "bg-sky-50/40" : ""
+                }`}
               >
                 {reordering && (
                   <div className="flex flex-col items-center pr-2 py-1 shrink-0">
@@ -202,8 +204,8 @@ export function FavoritesList({
                   type="button"
                   onClick={() => !reordering && onAccountAction(acc)}
                   disabled={reordering}
-                  className={`flex-1 min-w-0 text-right p-3.5 flex items-center justify-between gap-2 transition ${
-                    reordering ? "cursor-default" : "hover:bg-sky-50/60 active:scale-[0.995]"
+                  className={`flex-1 min-w-0 text-right p-3.5 flex items-center justify-between gap-2 transition rounded-2xl ${
+                    reordering ? "cursor-default" : "hover:bg-sky-50/40 active:scale-[0.995]"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">

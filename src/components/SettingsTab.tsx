@@ -14,6 +14,7 @@ import {
   MessageSquareText,
   RefreshCw,
   Loader2,
+  ChevronLeft,
 } from "lucide-react";
 import { BackupModal } from "./BackupModal";
 import { LoginModal } from "./LoginModal";
@@ -65,17 +66,17 @@ export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }:
       </div>
 
       {/* User profile card */}
-      <div className="ios-card p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-lg shadow-sm">
+      <div className="ios-card p-4 flex items-center justify-between border border-sky-100">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
             {user?.username ? user.username.charAt(0).toUpperCase() : "U"}
           </div>
-          <div>
-            <div className="text-xs font-bold text-slate-800">
-              {user?.fullName || "مدیر سیستم"}
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-slate-800 truncate">
+              {user?.fullName || "مدیر کیف پول"}
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              نام کاربری: <span className="font-mono text-sky-700">{user?.username}</span>
+            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+              نام کاربری: <span className="font-mono text-sky-700 font-semibold">{user?.username}</span>
             </div>
           </div>
         </div>
@@ -83,10 +84,10 @@ export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }:
         <button
           type="button"
           onClick={onLogout}
-          className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold"
+          className="px-3 py-1.5 text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-xl transition flex items-center gap-1.5 text-xs font-bold shrink-0 active:scale-95"
           title="خروج از حساب"
         >
-          <LogOut className="w-4 h-4" />
+          <LogOut className="w-3.5 h-3.5" />
           <span>خروج</span>
         </button>
       </div>
@@ -95,97 +96,112 @@ export function SettingsTab({ user, onLogout, onRefreshAllData, accounts = [] }:
       <div className="space-y-2">
         <h3 className="text-xs font-bold text-slate-700 px-1">امنیت و نسخه پشتیبان</h3>
 
-        <div className="ios-card divide-y divide-slate-100 overflow-hidden">
+        <div className="ios-card divide-y divide-slate-100 overflow-hidden border border-sky-100">
           {/* Backup & Restore */}
           <button
             type="button"
             onClick={() => setIsBackupOpen(true)}
-            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
+            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between gap-3 group"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
                 <Download className="w-4 h-4" />
               </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">
-                  پشتیبان‌گیری و بازگردانی (Backup & Restore)
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-800 truncate">
+                  پشتیبان‌گیری و بازگردانی اطلاعات
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  دانلود کامل پایگاه‌داده به عنوان JSON یا بازگردانی داده‌های قبلی
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                  دانلود کامل پایگاه‌داده به عنوان JSON یا بازگردانی فایل‌های قبلی
                 </div>
               </div>
             </div>
-            <span className="text-xs font-semibold text-sky-600">اقدام ❯</span>
+            <ChevronLeft className="w-4 h-4 text-slate-300 group-hover:text-sky-600 transition shrink-0" />
           </button>
 
           {/* بررسی و همگام‌سازی با نرم‌افزار سرمایه */}
-          <button
-            type="button"
-            onClick={handleSyncEquityAll}
-            disabled={isSyncingEquity}
-            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <div className="w-full p-3.5 text-right hover:bg-emerald-50/30 transition flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                 {isSyncingEquity ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
               </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-800 truncate">
                   همگام‌سازی با نرم‌افزار سرمایه
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  بررسی تراکنش‌های جاافتاده شرکا و انتقال خودکار به حساب سرمایه‌گذاران
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                  بررسی و انتقال خودکار تراکنش‌های شرکا (سلطانی و مزینانی)
                 </div>
               </div>
             </div>
-            <span className="text-xs font-semibold text-emerald-600">
-              {isSyncingEquity ? "در حال بررسی…" : "بررسی و انتقال ❯"}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={handleSyncEquityAll}
+              disabled={isSyncingEquity}
+              className="shrink-0 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/90 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 transition active:scale-95 disabled:opacity-60 whitespace-nowrap"
+            >
+              {isSyncingEquity ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>در حال بررسی…</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3 h-3" />
+                  <span>همگام‌سازی</span>
+                </>
+              )}
+            </button>
+          </div>
 
           {/* Quick Add from SMS */}
           <a
             href="/quick-add"
-            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
+            className="w-full p-3.5 text-right hover:bg-violet-50/30 transition flex items-center justify-between gap-3 group"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
                 <MessageSquareText className="w-4 h-4" />
               </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">
-                  ثبت سریع از پیامک (آزمایشی)
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                  <span className="truncate">ثبت سریع از پیامک</span>
+                  <span className="text-[9px] font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 shrink-0">
+                    آزمایشی
+                  </span>
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                   تحلیل خودکار پیامک بانکی، ثبت در انتظار و راهنمای شورتکات iOS
                 </div>
               </div>
             </div>
-            <span className="text-xs font-semibold text-sky-600">باز کردن ❯</span>
+            <ChevronLeft className="w-4 h-4 text-slate-300 group-hover:text-violet-600 transition shrink-0" />
           </a>
 
           {/* Change Password */}
           <button
             type="button"
             onClick={() => setIsChangePassOpen(true)}
-            className="w-full p-3.5 text-right hover:bg-sky-50/50 transition flex items-center justify-between"
+            className="w-full p-3.5 text-right hover:bg-amber-50/30 transition flex items-center justify-between gap-3 group"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                 <KeyRound className="w-4 h-4" />
               </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">تغییر رمز عبور ورود</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-800 truncate">
+                  تغییر رمز عبور ورود
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                   تعویض کلمه عبور محافظ برنامه برای امنیت بیشتر
                 </div>
               </div>
             </div>
-            <span className="text-xs font-semibold text-sky-600">تغییر ❯</span>
+            <ChevronLeft className="w-4 h-4 text-slate-300 group-hover:text-amber-600 transition shrink-0" />
           </button>
         </div>
       </div>
