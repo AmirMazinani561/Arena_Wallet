@@ -28,8 +28,10 @@ export async function POST(req: Request) {
 
     let totalChecked = 0;
     let newSynced = 0;
+    let newEquitySynced = 0;
+    let newPayrollSynced = 0;
     let alreadySynced = 0;
-    let skippedNoPartner = 0;
+    let skippedNoMatch = 0;
     let failed = 0;
 
     for (const r of rows) {
@@ -50,11 +52,12 @@ export async function POST(req: Request) {
       const toAcc = accMap.get(toId);
       if (!fromAcc || !toAcc) continue;
 
-      // فیلتر قطعی: فقط تراکنش‌هایی که یک طرف آن «سرمایه سلطانی» یا «سرمایه مزینانی» باشد
+      // فیلتر: تراکنش‌هایی که یک طرف آن حساب‌های سرمایه یا شخص/پرسنل باشد
       const fromAllowed = isAllowedEquityAccount(fromAcc.name);
       const toAllowed = isAllowedEquityAccount(toAcc.name);
+      const isPerson = fromAcc.type === "person" || toAcc.type === "person";
 
-      if (!fromAllowed && !toAllowed) continue;
+      if (!fromAllowed && !toAllowed && !isPerson) continue;
       if (fromAllowed && toAllowed) continue; // انتقال بین دو شریک
 
       totalChecked++;
@@ -66,36 +69,48 @@ export async function POST(req: Request) {
         toAccountId: toId,
         fromAccountName: fromAcc.name,
         toAccountName: toAcc.name,
+        fromAccountType: fromAcc.type,
+        toAccountType: toAcc.type,
         shamsiDate: String(r.shamsi_date),
         description: r.description ? String(r.description).trim() : null,
       });
 
       if (res.created) {
         newSynced++;
+        if (res.type === "payroll" || (res.data as any)?.type === "payroll") {
+          newPayrollSynced++;
+        } else {
+          newEquitySynced++;
+        }
       } else if (res.skipped === "duplicate") {
         alreadySynced++;
-      } else if (res.skipped === "no-partner" || res.skipped === "internal-transfer") {
-        skippedNoPartner++;
+      } else if (res.skipped === "no-partner" || res.skipped === "no-match" || res.skipped === "internal-transfer") {
+        skippedNoMatch++;
       } else {
         if (!res.ok) failed++;
       }
     }
 
     let message = "";
-    if (totalChecked === 0) {
-      message = "هیچ تراکنشی مرتبط با «سرمایه سلطانی» یا «سرمایه مزینانی» در سیستم یافت نشد.";
-    } else if (newSynced > 0) {
-      message = `${newSynced} تراکنش جدید مربوط به حساب‌های سرمایه به نرم‌افزار سرمایه منتقل شد (${alreadySynced} مورد از قبل ثبت بودند).`;
+    if (newSynced > 0) {
+      const parts: string[] = [];
+      if (newEquitySynced > 0) parts.push(`${newEquitySynced} تراکنش سرمایه`);
+      if (newPayrollSynced > 0) parts.push(`${newPayrollSynced} پرداختی حقوق و دستمزد`);
+      message = `همگام‌سازی با موفقیت انجام شد: ${parts.join(" و ")} با موفقیت منتقل گردید (${alreadySynced} مورد از قبل ثبت بودند).`;
+    } else if (alreadySynced > 0) {
+      message = `کلیه تراکنش‌های مرتبط (${alreadySynced} مورد) از قبل در نرم‌افزار حساب ثبت شده‌اند.`;
     } else {
-      message = `تمام ${totalChecked} تراکنش مربوط به حساب‌های سرمایه سلطانی و مزینانی از قبل در نرم‌افزار سرمایه ثبت شده‌اند.`;
+      message = `تراکنش جدیدی مرتبط با حساب‌های سرمایه یا پرسنل حقوق و دستمزد یافت نشد.`;
     }
 
     return NextResponse.json({
       success: true,
       totalChecked,
       newSynced,
+      newEquitySynced,
+      newPayrollSynced,
       alreadySynced,
-      skippedNoPartner,
+      skippedNoMatch,
       failed,
       message,
     });

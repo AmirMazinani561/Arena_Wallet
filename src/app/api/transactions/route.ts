@@ -241,6 +241,8 @@ export async function POST(req: Request) {
       toAccountId,
       fromAccountName: fromAcc.name,
       toAccountName: toAcc.name,
+      fromAccountType: fromAcc.type,
+      toAccountType: toAcc.type,
       shamsiDate: actualShamsi,
       description: description ? String(description).trim() : null,
     });
@@ -372,6 +374,8 @@ export async function PUT(req: Request) {
         toAccountId: finalToId,
         fromAccountName: fromAcc.name,
         toAccountName: toAcc.name,
+        fromAccountType: fromAcc.type,
+        toAccountType: toAcc.type,
         shamsiDate: finalShamsi,
         description: finalDesc,
       });

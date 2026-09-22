@@ -19,6 +19,8 @@ type SyncInput = {
   toAccountId: string;
   fromAccountName?: string | null;
   toAccountName?: string | null;
+  fromAccountType?: string | null;
+  toAccountType?: string | null;
   shamsiDate: string;            // '1404/06/22'
   description?: string | null;
 };
@@ -30,6 +32,7 @@ export interface SyncResult {
   error?: string;
   skipped?: string;
   created?: string;
+  type?: "equity" | "payroll";
 }
 
 function normalizeName(s?: string | null): string {
@@ -63,12 +66,14 @@ export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
   // تنظیم نشده ⇒ قابلیت خاموش است، بی‌سروصدا رد شو
   if (!base || !token) return { ok: false, error: "not_configured" };
 
-  // فیلتر سخت‌گیرانه: باید مشخصاً یک طرف «سرمایه سلطانی» یا «سرمایه مزینانی» باشد
+  // بررسی هدف: حساب شرکای سرمایه یا اشخاص حقوق و دستمزد
   const fromAllowed = isAllowedEquityAccount(tx.fromAccountName);
   const toAllowed = isAllowedEquityAccount(tx.toAccountName);
+  const isPerson = tx.fromAccountType === "person" || tx.toAccountType === "person";
 
-  if (!fromAllowed && !toAllowed) {
-    return { ok: true, skipped: "no-partner" };
+  // اگر هیچ‌کدام از طرفین نه شریک سرمایه باشد و نه شخص، ارسال لازم نیست
+  if (!fromAllowed && !toAllowed && !isPerson) {
+    return { ok: true, skipped: "no-match" };
   }
 
   // اگر هر دو طرف حساب سرمایه باشند (انتقال بین دو شریک) ⇒ بی‌اثر در سرمایه کل
@@ -97,7 +102,12 @@ export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
       signal: AbortSignal.timeout(8000),
     });
 
-    const json = (await res.json().catch(() => null)) as { created?: string; skipped?: string; error?: string } | null;
+    const json = (await res.json().catch(() => null)) as {
+      created?: string;
+      skipped?: string;
+      error?: string;
+      type?: "equity" | "payroll";
+    } | null;
 
     if (!res.ok) {
       console.error("[equity-sync] رد شد:", res.status, json);
@@ -110,6 +120,7 @@ export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
       data: json,
       created: json?.created,
       skipped: json?.skipped,
+      type: json?.type,
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "network_error";
