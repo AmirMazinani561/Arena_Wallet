@@ -21,6 +21,8 @@ type SyncInput = {
   toAccountName?: string | null;
   fromAccountType?: string | null;
   toAccountType?: string | null;
+  fromParentName?: string | null;
+  toParentName?: string | null;
   shamsiDate: string;            // '1404/06/22'
   description?: string | null;
 };
@@ -59,6 +61,18 @@ export function isAllowedEquityAccount(name?: string | null): boolean {
   return (isSoltani || isMazinani) && (norm.includes("سرمایه") || norm === "سلطانی" || norm === "مزینانی");
 }
 
+/**
+ * آیا حساب مربوط به پرسنل و کارمندان است؟
+ * یا زیرمجموعه سرفصل هزینه‌ای به نام «پرسنل» است، یا در نام حساب/والد کلمه پرسنل آمده است.
+ */
+export function isPersonnelAccount(accountName?: string | null, parentName?: string | null): boolean {
+  const normParent = normalizeName(parentName);
+  if (normParent.includes("پرسنل") || normParent.includes("حقوق")) return true;
+  const normName = normalizeName(accountName);
+  if (normName.includes("پرسنل") || normName.includes("حقوق")) return true;
+  return false;
+}
+
 export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
   const base = process.env.EQUITY_URL;
   const token = process.env.EQUITY_TOKEN;
@@ -66,13 +80,15 @@ export async function syncToEquity(tx: SyncInput): Promise<SyncResult> {
   // تنظیم نشده ⇒ قابلیت خاموش است، بی‌سروصدا رد شو
   if (!base || !token) return { ok: false, error: "not_configured" };
 
-  // بررسی هدف: حساب شرکای سرمایه یا اشخاص حقوق و دستمزد
+  // بررسی هدف: حساب شرکای سرمایه یا اشخاص/زیرمجموعه‌های پرسنل حقوق و دستمزد
   const fromAllowed = isAllowedEquityAccount(tx.fromAccountName);
   const toAllowed = isAllowedEquityAccount(tx.toAccountName);
+  const isPersonnel = isPersonnelAccount(tx.fromAccountName, tx.fromParentName) ||
+                      isPersonnelAccount(tx.toAccountName, tx.toParentName);
   const isPerson = tx.fromAccountType === "person" || tx.toAccountType === "person";
 
-  // اگر هیچ‌کدام از طرفین نه شریک سرمایه باشد و نه شخص، ارسال لازم نیست
-  if (!fromAllowed && !toAllowed && !isPerson) {
+  // اگر هیچ‌کدام از طرفین نه شریک سرمایه باشد، نه پرسنل و نه شخص، ارسال لازم نیست
+  if (!fromAllowed && !toAllowed && !isPersonnel && !isPerson) {
     return { ok: true, skipped: "no-match" };
   }
 

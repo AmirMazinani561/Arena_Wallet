@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureDatabase, listAccounts } from "@/db/repo";
 import { query } from "@/db/client";
 import { getSessionFromRequest } from "@/lib/session";
-import { syncToEquity, isAllowedEquityAccount } from "@/lib/equity-sync";
+import { syncToEquity, isAllowedEquityAccount, isPersonnelAccount } from "@/lib/equity-sync";
 import { PENDING_EXPENSE_CATEGORY_ID, PENDING_INCOME_CATEGORY_ID } from "@/lib/pending-categories";
 
 export const dynamic = "force-dynamic";
@@ -52,12 +52,17 @@ export async function POST(req: Request) {
       const toAcc = accMap.get(toId);
       if (!fromAcc || !toAcc) continue;
 
-      // فیلتر: تراکنش‌هایی که یک طرف آن حساب‌های سرمایه یا شخص/پرسنل باشد
+      const fromParent = fromAcc.parentId ? accMap.get(fromAcc.parentId) : null;
+      const toParent = toAcc.parentId ? accMap.get(toAcc.parentId) : null;
+
+      // فیلتر: تراکنش‌هایی که یک طرف آن حساب‌های سرمایه، پرسنل یا شخص باشد
       const fromAllowed = isAllowedEquityAccount(fromAcc.name);
       const toAllowed = isAllowedEquityAccount(toAcc.name);
+      const isPersonnel = isPersonnelAccount(fromAcc.name, fromParent?.name) ||
+                          isPersonnelAccount(toAcc.name, toParent?.name);
       const isPerson = fromAcc.type === "person" || toAcc.type === "person";
 
-      if (!fromAllowed && !toAllowed && !isPerson) continue;
+      if (!fromAllowed && !toAllowed && !isPersonnel && !isPerson) continue;
       if (fromAllowed && toAllowed) continue; // انتقال بین دو شریک
 
       totalChecked++;
@@ -71,6 +76,8 @@ export async function POST(req: Request) {
         toAccountName: toAcc.name,
         fromAccountType: fromAcc.type,
         toAccountType: toAcc.type,
+        fromParentName: fromParent?.name || null,
+        toParentName: toParent?.name || null,
         shamsiDate: String(r.shamsi_date),
         description: r.description ? String(r.description).trim() : null,
       });

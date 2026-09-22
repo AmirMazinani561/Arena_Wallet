@@ -231,6 +231,9 @@ export async function POST(req: Request) {
       trackingNumber: cleanTracking,
     });
 
+    const fromParent = fromAcc.parentId ? allAccounts.find((a) => a.id === fromAcc.parentId) : null;
+    const toParent = toAcc.parentId ? allAccounts.find((a) => a.id === toAcc.parentId) : null;
+
     // ↓↓↓ افزوده شد: همگام‌سازی با نرم‌افزار سرمایه ↓↓↓
     // بدون await تا پاسخ به کاربر کند نشود. اگر هیچ طرفی حساب سرمایه
     // نباشد، سمت مقابل خودش تراکنش را نادیده می‌گیرد.
@@ -243,6 +246,8 @@ export async function POST(req: Request) {
       toAccountName: toAcc.name,
       fromAccountType: fromAcc.type,
       toAccountType: toAcc.type,
+      fromParentName: fromParent?.name || null,
+      toParentName: toParent?.name || null,
       shamsiDate: actualShamsi,
       description: description ? String(description).trim() : null,
     });
@@ -367,6 +372,9 @@ export async function PUT(req: Request) {
         ? (description ? String(description).trim() : null)
         : (existing.description ? String(existing.description).trim() : null);
 
+      const fromParent = fromAcc.parentId ? allAccounts.find((a) => a.id === fromAcc.parentId) : null;
+      const toParent = toAcc.parentId ? allAccounts.find((a) => a.id === toAcc.parentId) : null;
+
       void syncToEquity({
         id: String(id),
         amount: finalAmount,
@@ -376,6 +384,8 @@ export async function PUT(req: Request) {
         toAccountName: toAcc.name,
         fromAccountType: fromAcc.type,
         toAccountType: toAcc.type,
+        fromParentName: fromParent?.name || null,
+        toParentName: toParent?.name || null,
         shamsiDate: finalShamsi,
         description: finalDesc,
       });
